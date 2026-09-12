@@ -314,6 +314,87 @@ final class TaskFormStateTests: XCTestCase {
         }
     }
 
+    // MARK: - Project picker wiring (issue #16 regression)
+
+    func testApplyProjectChoiceExistingCarriesIntoCreatedTask() throws {
+        // (a) create mode: the picker's existing-project choice lands in
+        // the saved task — it is not silently dropped.
+        var state = TaskFormState()
+        state.title = "Fresh task"
+        state.commitCategory("Inbox")
+
+        state.applyProjectChoice(.existing("Writing"))
+        XCTAssertEqual(state.projectName, "Writing")
+
+        let task = try state.makeTask(preserving: nil)
+        XCTAssertEqual(task.project?.name, "Writing")
+    }
+
+    func testApplyProjectChoiceNewFreeTextCarriesIntoCreatedTask() throws {
+        // (b) create mode: a typed new-project name lands in the saved task.
+        var state = TaskFormState()
+        state.title = "Fresh task"
+        state.commitCategory("Inbox")
+
+        state.applyProjectChoice(.new, newProjectName: "Orion")
+        XCTAssertEqual(state.projectName, "Orion")
+
+        let task = try state.makeTask(preserving: nil)
+        XCTAssertEqual(task.project?.name, "Orion")
+    }
+
+    func testApplyProjectChoiceNoneClearsTheProjectToNil() throws {
+        // (c) edit mode: changing the pre-filled project to None clears it
+        // — nil, not an empty string.
+        let original = try makeFullTask()
+        XCTAssertEqual(original.project?.name, "Work", "precondition: the task has a project")
+        var state = TaskFormState(task: original)
+
+        state.applyProjectChoice(.none)
+        XCTAssertNil(state.projectName, "None clears the project (nil, never an empty string)")
+
+        let updated = try state.makeTask(preserving: original)
+        XCTAssertNil(updated.project)
+    }
+
+    func testApplyProjectChoiceSwitchingProjectsSavesTheNewOne() throws {
+        // (d) edit mode: changing project A → B saves B, not the stale A.
+        let original = try makeFullTask()
+        var state = TaskFormState(task: original)
+
+        state.applyProjectChoice(.existing("Personal"))
+        XCTAssertEqual(state.projectName, "Personal")
+
+        let updated = try state.makeTask(preserving: original)
+        XCTAssertEqual(updated.project?.name, "Personal")
+        XCTAssertNotEqual(updated.project, original.project)
+    }
+
+    func testApplyProjectChoiceFromNewToNoneClearsTheTypedName() {
+        // A typed new-project name does not linger once the picker moves to
+        // None (the reported stale-project symptom, create-mode side).
+        var state = TaskFormState()
+        state.title = "Fresh task"
+        state.commitCategory("Inbox")
+        state.applyProjectChoice(.new, newProjectName: "Orion")
+
+        state.applyProjectChoice(.none)
+
+        XCTAssertNil(state.projectName)
+    }
+
+    func testApplyProjectChoiceWhitespaceNewNameSavesNoProject() throws {
+        // A whitespace-only new-project name normalizes to no project at
+        // save time (the documented makeTask rule).
+        var state = TaskFormState()
+        state.title = "Fresh task"
+        state.commitCategory("Inbox")
+
+        state.applyProjectChoice(.new, newProjectName: "   ")
+        let task = try state.makeTask(preserving: nil)
+        XCTAssertNil(task.project)
+    }
+
     // MARK: - Inventory gathering
 
     func testKnownCategoryNamesDeduplicateCaseInsensitivelyAndSort() {

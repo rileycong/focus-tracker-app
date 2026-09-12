@@ -48,6 +48,11 @@ struct TaskFormRequest: Identifiable {
 ///   a comma creates a token; whitespace-only input creates nothing;
 ///   duplicates (case-insensitive) are not added twice. A pending draft is
 ///   committed on save so a half-typed category is not lost.
+/// - **Project (§6.4):** the picker's choice — an existing project, a typed
+///   new-project name, or None — flows into the form state as it changes
+///   (`applyProjectChoice`) and again at save time, so it always reaches
+///   the saved task in both create and edit modes; None clears the project
+///   (nil, not an empty string).
 /// - **Keyboard:** Enter triggers the default (save) action — it only
 ///   closes the form when the form is valid; Esc cancels.
 /// - Validation errors are shown inline next to their fields and block the
@@ -80,12 +85,10 @@ struct TaskFormView: View {
     @State private var saveErrorMessage: String?
 
     /// The project picker's selection shape (issue #16: optional project —
-    /// existing projects from the inventory + free-text entry for a new one).
-    private enum ProjectChoice: Hashable {
-        case none
-        case existing(String)
-        case new
-    }
+    /// existing projects from the inventory + free-text entry for a new
+    /// one); defined on `TaskFormState`, which owns the choice → state
+    /// wiring (`applyProjectChoice`).
+    private typealias ProjectChoice = TaskFormState.ProjectChoice
 
     init(
         mode: TaskFormRequest.Mode,
@@ -291,9 +294,20 @@ struct TaskFormView: View {
             }
             .pickerStyle(.menu)
             .labelsHidden()
+            .onChange(of: projectChoice) { _, choice in
+                // The picker's choice lands in the form state as it
+                // changes, so the picked project is never silently
+                // dropped and a stale one never persists (issue #16).
+                state.applyProjectChoice(choice, newProjectName: newProjectName)
+            }
             if projectChoice == .new {
                 TextField("New project name", text: $newProjectName)
                     .textFieldStyle(.roundedBorder)
+                    .onChange(of: newProjectName) { _, name in
+                        // The typed new-project name flows into the state
+                        // as it is typed (issue #16).
+                        state.applyProjectChoice(.new, newProjectName: name)
+                    }
             }
         }
     }
@@ -395,6 +409,11 @@ struct TaskFormView: View {
         // A pending category draft commits on save so a half-typed name is
         // not silently lost (documented).
         state.commitWholeDraft()
+        // The project picker's current choice lands in the state here too —
+        // the onChange handlers keep it in sync live; this is the save-time
+        // guarantee that the chosen project (existing, new, or None)
+        // reaches the saved task in both create and edit modes (issue #16).
+        state.applyProjectChoice(projectChoice, newProjectName: newProjectName)
         guard state.isValid else {
             showValidationErrors = true
             return

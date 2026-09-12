@@ -285,4 +285,94 @@ final class AppModelTaskWriteTests: XCTestCase {
             XCTAssertEqual(error, .noVaultConfigured)
         }
     }
+
+    // MARK: - Project field wiring (issue #16 regression: picker → saved task → disk)
+
+    /// The form's save path (issue #16): `original` pre-fills the state in
+    /// edit mode (`TaskFormState(task:)`, as the view does), `configure`
+    /// fills the rest, then `save()`'s steps — commit the pending draft,
+    /// apply the picker's choice (`applyProjectChoice`, as the view does
+    /// live and at save time), `makeTask(preserving:)` — build the task the
+    /// passthrough persists.
+    private func makeFormTask(
+        prefilling original: TaskItem? = nil,
+        _ configure: (inout TaskFormState) -> Void,
+        projectChoice: TaskFormState.ProjectChoice = .none,
+        newProjectName: String = ""
+    ) throws -> TaskItem {
+        var state = original.map(TaskFormState.init(task:)) ?? TaskFormState()
+        configure(&state)
+        state.commitWholeDraft()
+        state.applyProjectChoice(projectChoice, newProjectName: newProjectName)
+        return try state.makeTask(preserving: original)
+    }
+
+    func testCreateWithExistingProjectSelectedSavesItToDisk() async throws {
+        // (a) create mode: the picker's existing-project choice lands in the
+        // saved task (regression: it used to be silently dropped).
+        let model = try await makeConfiguredModel()
+        let task = try makeFormTask(
+            { state in
+                state.title = "Ship release notes"
+                state.commitCategory("Writing")
+            },
+            projectChoice: .existing("Writing"))
+
+        _ = try await model.createTask(task)
+
+        let parsed = try parsedTask("Ship release notes.md")
+        XCTAssertEqual(parsed.title, "Ship release notes")
+        XCTAssertEqual(parsed.project?.name, "Writing")
+    }
+
+    func testCreateWithNewFreeTextProjectSavesItToDisk() async throws {
+        // (b) create mode: a typed new-project name lands in the saved task.
+        let model = try await makeConfiguredModel()
+        let task = try makeFormTask(
+            { state in
+                state.title = "Audit subscriptions"
+                state.commitCategory("Admin")
+            },
+            projectChoice: .new,
+            newProjectName: "Life Admin")
+
+        _ = try await model.createTask(task)
+
+        let parsed = try parsedTask("Audit subscriptions.md")
+        XCTAssertEqual(parsed.project?.name, "Life Admin")
+    }
+
+    func testEditProjectToNoneClearsItOnDisk() async throws {
+        // (c) edit mode: changing the project to None clears it — nil on
+        // disk, not an empty string (regression: the stale project
+        // persisted regardless of the picker).
+        let model = try await makeConfiguredModel()
+        let original = try XCTUnwrap(model.tasks.first { $0.id == Self.planQ4ID })
+        XCTAssertEqual(original.project?.name, "Work", "precondition: the fixture task has a project")
+        let updated = try makeFormTask(
+            prefilling: original, { _ in },
+            projectChoice: .none)
+
+        _ = try await model.updateTask(updated)
+
+        let parsed = try parsedTask("Plan Q4 roadmap.md")
+        XCTAssertNil(parsed.project, "None clears the project (nil, never an empty string)")
+        XCTAssertEqual(parsed.title, "Plan Q4 roadmap")
+    }
+
+    func testEditProjectAToBSavesBOnDisk() async throws {
+        // (d) edit mode: changing project A → B saves B (regression: the
+        // pre-filled project persisted regardless of the picker).
+        let model = try await makeConfiguredModel()
+        let original = try XCTUnwrap(model.tasks.first { $0.id == Self.planQ4ID })
+        let updated = try makeFormTask(
+            prefilling: original, { _ in },
+            projectChoice: .existing("Personal"))
+
+        _ = try await model.updateTask(updated)
+
+        let parsed = try parsedTask("Plan Q4 roadmap.md")
+        XCTAssertEqual(parsed.project?.name, "Personal")
+        XCTAssertNotEqual(parsed.project?.name, "Work")
+    }
 }

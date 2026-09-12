@@ -132,6 +132,33 @@ struct TaskFormState: Equatable, Sendable {
             subtasks: original?.subtasks ?? [])
     }
 
+    // MARK: - Project picker wiring (issue #16)
+
+    /// The project picker's selection (issue #16: optional project —
+    /// existing projects from the inventory + free-text entry for a new
+    /// one). Defined here so the choice → state wiring is unit-testable.
+    enum ProjectChoice: Hashable {
+        case none
+        case existing(String)
+        case new
+    }
+
+    /// Applies a project-picker selection to `projectName` (issue #16): an
+    /// existing choice sets the project to that name, the new-project
+    /// choice sets it to the typed name (verbatim — `makeTask(preserving:)`
+    /// treats a whitespace-only name as no project), and the None choice
+    /// clears the project entirely (nil, never an empty string). The view
+    /// applies the choice live as the picker/free-text field change and
+    /// again at save time, so the chosen project — existing, new, or None —
+    /// always lands in the saved `TaskItem` in both create and edit modes.
+    mutating func applyProjectChoice(_ choice: ProjectChoice, newProjectName: String = "") {
+        switch choice {
+        case .none: projectName = nil
+        case .existing(let name): projectName = name
+        case .new: projectName = newProjectName
+        }
+    }
+
     // MARK: - Inline category handling (issue #16, PRD §6.3)
 
     /// Normalizes a raw draft segment: whitespace-trimmed; nil when nothing
