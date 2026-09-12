@@ -16,7 +16,10 @@
 		335FFAE1E20D5816ACF0D335 /* FrontmatterSplitter.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9E370EA1340964AFF7C24132 /* FrontmatterSplitter.swift */; };
 		443D3CE32D51A6DF3ADCDBA3 /* FrontmatterEncoder.swift in Sources */ = {isa = PBXBuildFile; fileRef = 496B467448E0EBB4F9699080 /* FrontmatterEncoder.swift */; };
 		47F742470901C6A5A3941939 /* FocusTrackerApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 248E5131297EB06C2E76BC68 /* FocusTrackerApp.swift */; };
+		5811C92D98367DEC729F7EA1 /* VaultStoreTransitionTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B0C967C88404484608223706 /* VaultStoreTransitionTests.swift */; };
 		5C40816107FF2F8EF9A813F3 /* SmokeTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2FD6B094AE292E2B2CFE2055 /* SmokeTests.swift */; };
+		637271F24F8DCCFC153B40B0 /* StatusTransition.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5F0BA521BD58A62A830A1C10 /* StatusTransition.swift */; };
+		6D529C027DDC08698272BBCA /* VaultStoreStatusTransitions.swift in Sources */ = {isa = PBXBuildFile; fileRef = 84025FD8E3B25790B7D988C9 /* VaultStoreStatusTransitions.swift */; };
 		71C6973B688B2079F118533E /* SubtaskItem.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2C3DCD0FA4C4F11707ADCC34 /* SubtaskItem.swift */; };
 		72319A87076D8C1FCBEF4E8C /* TaskItem.swift in Sources */ = {isa = PBXBuildFile; fileRef = C76EB463C7C44B3BA54CD43C /* TaskItem.swift */; };
 		72FE907904C132B266A02074 /* TaskModelTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F64F2B847F2F64F2D070FE92 /* TaskModelTests.swift */; };
@@ -30,6 +33,7 @@
 		BD328D7DD66DBB049E79C6ED /* FrontmatterDecoder.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1CAECA9BDEFA889C6DE2EBE9 /* FrontmatterDecoder.swift */; };
 		C71E057857B6BCB5BF0CA4DA /* AtomicFileWriterError.swift in Sources */ = {isa = PBXBuildFile; fileRef = E0BA7BF8D84B73D94EF3157C /* AtomicFileWriterError.swift */; };
 		CD6092F00DDF72B36F057846 /* VaultStoreError.swift in Sources */ = {isa = PBXBuildFile; fileRef = F2263127664569F0F7194904 /* VaultStoreError.swift */; };
+		D28F8691AE913F628117CD75 /* StatusTransitionTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 20D561F957E51C275426C970 /* StatusTransitionTests.swift */; };
 		DF5EA0555990FD6FC645C434 /* VaultStoreTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 28BA6F82E572C982197E1959 /* VaultStoreTests.swift */; };
 		FB83696C4D6A3A0A58D84EB1 /* Project.swift in Sources */ = {isa = PBXBuildFile; fileRef = E0CE5BEA0D95F2D356A98AB3 /* Project.swift */; };
 /* End PBXBuildFile section */
@@ -50,6 +54,7 @@
 		19168751BF453E16196AF15C /* FocusTrackerTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = FocusTrackerTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		1CAECA9BDEFA889C6DE2EBE9 /* FrontmatterDecoder.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FrontmatterDecoder.swift; sourceTree = "<group>"; };
 		1E40706EE3BCB1DD382F1F49 /* FocusTracker.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = FocusTracker.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		20D561F957E51C275426C970 /* StatusTransitionTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StatusTransitionTests.swift; sourceTree = "<group>"; };
 		248E5131297EB06C2E76BC68 /* FocusTrackerApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FocusTrackerApp.swift; sourceTree = "<group>"; };
 		28BA6F82E572C982197E1959 /* VaultStoreTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VaultStoreTests.swift; sourceTree = "<group>"; };
 		2C3DCD0FA4C4F11707ADCC34 /* SubtaskItem.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SubtaskItem.swift; sourceTree = "<group>"; };
@@ -57,9 +62,12 @@
 		36866CB5BBBDD9DC3EA4B5C5 /* VaultStoreWriteTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VaultStoreWriteTests.swift; sourceTree = "<group>"; };
 		496B467448E0EBB4F9699080 /* FrontmatterEncoder.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FrontmatterEncoder.swift; sourceTree = "<group>"; };
 		4D5486D7E5950BEA4B04343F /* FrontmatterCodecTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FrontmatterCodecTests.swift; sourceTree = "<group>"; };
+		5F0BA521BD58A62A830A1C10 /* StatusTransition.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StatusTransition.swift; sourceTree = "<group>"; };
+		84025FD8E3B25790B7D988C9 /* VaultStoreStatusTransitions.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VaultStoreStatusTransitions.swift; sourceTree = "<group>"; };
 		9E370EA1340964AFF7C24132 /* FrontmatterSplitter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FrontmatterSplitter.swift; sourceTree = "<group>"; };
 		AC47B30A5701AAE8E38FA746 /* TaskCompletion.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TaskCompletion.swift; sourceTree = "<group>"; };
 		AEA22B891260224B50F53902 /* TaskEnums.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TaskEnums.swift; sourceTree = "<group>"; };
+		B0C967C88404484608223706 /* VaultStoreTransitionTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VaultStoreTransitionTests.swift; sourceTree = "<group>"; };
 		BCE466B78BD1A66F6A5A44BD /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
 		BDF05E8048A2CA4C67790C50 /* Category.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Category.swift; sourceTree = "<group>"; };
 		C76EB463C7C44B3BA54CD43C /* TaskItem.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TaskItem.swift; sourceTree = "<group>"; };
@@ -127,6 +135,7 @@
 			children = (
 				248E5131297EB06C2E76BC68 /* FocusTrackerApp.swift */,
 				BCE466B78BD1A66F6A5A44BD /* Info.plist */,
+				FBD6C6C15E9C60AD986DFDC4 /* Domain */,
 				1110256E59A63D28755EA8AA /* Models */,
 				899C1BE73A8D1896CE1D7916 /* Vault */,
 			);
@@ -145,6 +154,7 @@
 				9E370EA1340964AFF7C24132 /* FrontmatterSplitter.swift */,
 				CF0567BC0B0379E14C94219B /* VaultStore.swift */,
 				F2263127664569F0F7194904 /* VaultStoreError.swift */,
+				84025FD8E3B25790B7D988C9 /* VaultStoreStatusTransitions.swift */,
 			);
 			path = Vault;
 			sourceTree = "<group>";
@@ -155,9 +165,11 @@
 				DDB02A5B746D6AFFE94F389F /* AtomicFileWriterTests.swift */,
 				4D5486D7E5950BEA4B04343F /* FrontmatterCodecTests.swift */,
 				2FD6B094AE292E2B2CFE2055 /* SmokeTests.swift */,
+				20D561F957E51C275426C970 /* StatusTransitionTests.swift */,
 				F64F2B847F2F64F2D070FE92 /* TaskModelTests.swift */,
 				08EFA1B0F2ECE21BD65D1D71 /* VaultStoreSubtaskTests.swift */,
 				28BA6F82E572C982197E1959 /* VaultStoreTests.swift */,
+				B0C967C88404484608223706 /* VaultStoreTransitionTests.swift */,
 				36866CB5BBBDD9DC3EA4B5C5 /* VaultStoreWriteTests.swift */,
 			);
 			path = FocusTrackerTests;
@@ -179,6 +191,14 @@
 				19168751BF453E16196AF15C /* FocusTrackerTests.xctest */,
 			);
 			name = Products;
+			sourceTree = "<group>";
+		};
+		FBD6C6C15E9C60AD986DFDC4 /* Domain */ = {
+			isa = PBXGroup;
+			children = (
+				5F0BA521BD58A62A830A1C10 /* StatusTransition.swift */,
+			);
+			path = Domain;
 			sourceTree = "<group>";
 		};
 /* End PBXGroup section */
@@ -271,9 +291,11 @@
 				A2DCE257E978CD6BAFAE2168 /* AtomicFileWriterTests.swift in Sources */,
 				13CF5781F461AD63F5372CA9 /* FrontmatterCodecTests.swift in Sources */,
 				5C40816107FF2F8EF9A813F3 /* SmokeTests.swift in Sources */,
+				D28F8691AE913F628117CD75 /* StatusTransitionTests.swift in Sources */,
 				72FE907904C132B266A02074 /* TaskModelTests.swift in Sources */,
 				783F814497AE507AEF8EF350 /* VaultStoreSubtaskTests.swift in Sources */,
 				DF5EA0555990FD6FC645C434 /* VaultStoreTests.swift in Sources */,
+				5811C92D98367DEC729F7EA1 /* VaultStoreTransitionTests.swift in Sources */,
 				1EFB3035F6011B2244B38BE2 /* VaultStoreWriteTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
@@ -292,12 +314,14 @@
 				84E73409362F826BDBE0669B /* FrontmatterError.swift in Sources */,
 				335FFAE1E20D5816ACF0D335 /* FrontmatterSplitter.swift in Sources */,
 				FB83696C4D6A3A0A58D84EB1 /* Project.swift in Sources */,
+				637271F24F8DCCFC153B40B0 /* StatusTransition.swift in Sources */,
 				71C6973B688B2079F118533E /* SubtaskItem.swift in Sources */,
 				05AC78D4781BF0F715D8B280 /* TaskCompletion.swift in Sources */,
 				8DC94FF8D60CDCCA3EFE6439 /* TaskEnums.swift in Sources */,
 				72319A87076D8C1FCBEF4E8C /* TaskItem.swift in Sources */,
 				0C0890159FFBB5CADECDDDF0 /* VaultStore.swift in Sources */,
 				CD6092F00DDF72B36F057846 /* VaultStoreError.swift in Sources */,
+				6D529C027DDC08698272BBCA /* VaultStoreStatusTransitions.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
