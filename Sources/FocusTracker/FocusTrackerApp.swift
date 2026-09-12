@@ -20,15 +20,16 @@ struct FocusTrackerApp: App {
     var body: some Scene {
         WindowGroup {
             // The app-phase swap (issue #19, PRD §20.3): the start flow moves
-            // the app to the placeholder timer screen; ending it returns to
-            // the Tasks view. The `.task` bootstrap runs once per window —
-            // the phase swap replaces the content, not the window identity.
+            // the app to the full-screen timer view (issue #20 — the #19
+            // placeholder was deleted); ending it returns to the Tasks view.
+            // The `.task` bootstrap runs once per window — the phase swap
+            // replaces the content, not the window identity.
             Group {
                 switch model.appPhase {
                 case .tasksView:
                     TasksView(model: model)
                 case .timerView(let context):
-                    SessionTimerPlaceholderView(context: context, model: model)
+                    TimerView(context: context, model: model)
                 }
             }
             .task { await model.bootstrap() }
