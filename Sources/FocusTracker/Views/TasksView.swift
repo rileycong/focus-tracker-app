@@ -9,6 +9,9 @@ import SwiftUI
 struct TasksView: View {
     private let model: AppModel
     @State private var viewModel: TasksViewModel
+    /// The #16 form presentation: nil = closed; non-nil shows the sheet
+    /// (create, or edit of a specific task).
+    @State private var formRequest: TaskFormRequest?
 
     /// - Parameter model: The #14 composition root. The view model starts
     ///   from `model.tasks` (empty before the first load) and is kept in step
@@ -46,6 +49,20 @@ struct TasksView: View {
         .onChange(of: model.tasks) { _, tasks in
             viewModel.updateTasks(tasks)
         }
+        .sheet(item: $formRequest) { request in
+            TaskFormView(
+                mode: request.mode,
+                knownCategoryNames: TaskFormState.knownCategoryNames(in: model.tasks),
+                knownProjectNames: TaskFormState.knownProjectNames(in: model.tasks),
+                onSave: { task in
+                    switch request.mode {
+                    case .create:
+                        try await model.createTask(task)
+                    case .edit:
+                        try await model.updateTask(task)
+                    }
+                })
+        }
     }
 
     // MARK: - Loaded (the actual task inventory)
@@ -63,6 +80,25 @@ struct TasksView: View {
             }
         }
         .toolbar {
+            ToolbarItem {
+                Button {
+                    formRequest = TaskFormRequest(mode: .create)
+                } label: {
+                    Label("New Task", systemImage: "plus")
+                }
+                .keyboardShortcut("n", modifiers: .command)
+                .help("Create a new task (⌘N)")
+            }
+            ToolbarItem {
+                Button {
+                    editSelectedTask()
+                } label: {
+                    Label("Edit", systemImage: "pencil")
+                }
+                .keyboardShortcut("e", modifiers: .command)
+                .disabled(viewModel.selectedTaskID == nil)
+                .help("Edit the selected task (⌘E)")
+            }
             ToolbarItem {
                 Toggle(isOn: $viewModel.showCompleted) {
                     Label("Show completed/dropped", systemImage: "eye")
@@ -129,6 +165,14 @@ struct TasksView: View {
         DisclosureGroup(isExpanded: viewModel.expandedBinding(forKey: group.collapseKey)) {
             ForEach(group.tasks) { task in
                 TaskRowView(task: task, viewModel: viewModel)
+                    .contextMenu {
+                        Button("New Task…") {
+                            formRequest = TaskFormRequest(mode: .create)
+                        }
+                        Button("Edit Task…") {
+                            formRequest = TaskFormRequest(mode: .edit(task))
+                        }
+                    }
             }
         } label: {
             HStack(spacing: DesignTokens.spacingS) {
@@ -200,6 +244,18 @@ struct TasksView: View {
             .background(DesignTokens.bannerBackground)
             Spacer()
         }
+    }
+
+    // MARK: - Task form entries (issue #16)
+
+    /// Opens the edit form for the currently selected task (the toolbar
+    /// Edit button / ⌘E path). A missing selection is a typed no-op — the
+    /// button is disabled without one anyway.
+    private func editSelectedTask() {
+        guard let id = viewModel.selectedTaskID,
+            let task = model.tasks.first(where: { $0.id == id })
+        else { return }
+        formRequest = TaskFormRequest(mode: .edit(task))
     }
 
     // MARK: - Vault picker

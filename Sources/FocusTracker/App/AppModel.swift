@@ -141,6 +141,15 @@ public final class AppModel {
         case noPendingSession
     }
 
+    /// The typed failure of a task write with no vault to write through
+    /// (issue #16): `createTask`/`updateTask` fail closed when no vault path
+    /// is configured — nothing can ever write to a wrong or placeholder
+    /// location (PRD §18). Store-level failures surface as thrown
+    /// `VaultStoreError`s unchanged.
+    public enum TaskWriteError: Error, Equatable, Sendable {
+        case noVaultConfigured
+    }
+
     // MARK: - Owned layers
 
     /// The task store for the configured vault; nil until a vault path is
@@ -331,6 +340,60 @@ public final class AppModel {
             // Documented fail-safe: keep the on-disk snapshot (see above).
         }
         return .discarded
+    }
+
+    // MARK: - Task write passthroughs (issue #16, PRD §8.5)
+
+    /// Creates a task through `VaultStore.create` (#7: slug filename +
+    /// collision suffix, atomic write, in-memory inventory synced) and
+    /// returns the persisted task (with the ID it carries).
+    ///
+    /// Errors surface typed: `.noVaultConfigured` when there is no store to
+    /// write through, and the store's own `VaultStoreError` (e.g.
+    /// `.duplicateTaskIDOnCreate`, `.writeFailed`) unchanged on any failure —
+    /// on which nothing is written and the observable state is untouched.
+    ///
+    /// On success the exposed `tasks`/`vaultState` are refreshed from the
+    /// store's **already-synced** inventory (engineer's choice documented on
+    /// `mirrorSyncedInventory(from:)`) — no reload, no second disk read.
+    @discardableResult
+    public func createTask(_ task: TaskItem) async throws -> TaskItem {
+        guard let store = vaultStore else { throw TaskWriteError.noVaultConfigured }
+        let created = try await store.create(task)
+        await mirrorSyncedInventory(from: store)
+        return created
+    }
+
+    /// Persists a full task through `VaultStore.update` (#7: target file
+    /// resolved via the ID↔filename mapping — never re-derived from the
+    /// title, so a title change keeps the filename; staleness-guarded,
+    /// atomic) and returns the persisted task.
+    ///
+    /// Errors surface typed exactly as on `createTask`. On success the
+    /// exposed `tasks`/`vaultState` are refreshed from the store's
+    /// already-synced inventory (no reload).
+    @discardableResult
+    public func updateTask(_ task: TaskItem) async throws -> TaskItem {
+        guard let store = vaultStore else { throw TaskWriteError.noVaultConfigured }
+        let updated = try await store.update(task)
+        await mirrorSyncedInventory(from: store)
+        return updated
+    }
+
+    /// Mirrors the store's write-synced inventory into the observable state
+    /// (issue #16 engineer's choice between `reloadVault()` and mirroring):
+    /// #7 keeps the store's `tasks` in step with disk after every successful
+    /// write, so the model can refresh without an extra disk read. The state
+    /// becomes `.loaded` with the store's current tasks/warnings — a
+    /// successful write proves the vault and its `Tasks/` directory are real,
+    /// so upgrading a stale degraded display state is accurate, and
+    /// `warnings` still describe the last load (per the #7 contract, writes
+    /// never touch them).
+    private func mirrorSyncedInventory(from store: VaultStore) async {
+        let syncedTasks = await store.tasks
+        let warnings = await store.warnings
+        tasks = syncedTasks
+        vaultState = .loaded(VaultStore.Inventory(tasks: syncedTasks, warnings: warnings))
     }
 
     // MARK: - Active session passthroughs (thin; real flows are #19/#22)
