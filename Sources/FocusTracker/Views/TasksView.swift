@@ -16,6 +16,9 @@ struct TasksView: View {
     /// The #17 subtask form presentation: nil = closed; non-nil shows the
     /// sheet (a create under a given parent, or the edit of a subtask).
     @State private var subtaskFormRequest: SubtaskFormRequest?
+    /// The #19 session-start sheet presentation: nil = closed; non-nil
+    /// shows the sheet, optionally pre-selecting the row it was opened from.
+    @State private var sessionStartRequest: SessionStartRequest?
     /// The #17 delete path's error surface: the subtask confirmation dialog
     /// has no form to surface a store error inline, so a failed delete is
     /// reported here (the inventory is untouched on failure — nothing is
@@ -65,6 +68,19 @@ struct TasksView: View {
         .background(DesignTokens.background)
         .onChange(of: model.tasks) { _, tasks in
             viewModel.updateTasks(tasks)
+        }
+        .sheet(item: $sessionStartRequest) { request in
+            SessionStartView(
+                tasks: model.tasks,
+                knownCategoryNames: TaskFormState.knownCategoryNames(in: model.tasks),
+                preselectedTargetID: request.preselectedTargetID,
+                onStart: { taskID, duration in
+                    try await model.startSession(taskID: taskID, duration: duration)
+                },
+                onStartAdHoc: { title, categoryNames, duration in
+                    try await model.startAdHocSession(
+                        title: title, categoryNames: categoryNames, duration: duration)
+                })
         }
         .sheet(item: $formRequest) { request in
             TaskFormView(
@@ -179,6 +195,17 @@ struct TasksView: View {
             }
             ToolbarItem {
                 Button {
+                    // The #19 toolbar entry point: no preselection — the
+                    // picker starts empty. (No keyboard shortcut: the sheet
+                    // is modal enough and ⌘S would keep firing behind it.)
+                    sessionStartRequest = SessionStartRequest(preselectedTargetID: nil)
+                } label: {
+                    Label("Start Session", systemImage: "play")
+                }
+                .help("Start a focus session on a task or subtask")
+            }
+            ToolbarItem {
+                Button {
                     editSelectedTask()
                 } label: {
                     Label("Edit", systemImage: "pencil")
@@ -275,6 +302,16 @@ struct TasksView: View {
                                     dropping: draggedID, at: destinationIndex, in: group)
                             }))
                     .contextMenu {
+                        // The #19 start entry point (nice-to-have
+                        // preselection): only on planning-eligible rows — the
+                        // start flow refuses Blocked/Dropped/Done with a
+                        // pinned reason, so the menu simply doesn't offer it.
+                        if task.status.isPlanningEligible {
+                            Button("Start Session…") {
+                                subtaskActions.startSession(task.id, nil)
+                            }
+                            Divider()
+                        }
                         Button("New Task…") {
                             formRequest = TaskFormRequest(mode: .create)
                         }
@@ -409,6 +446,13 @@ struct TasksView: View {
                 } catch {
                     reorderErrorMessage = error.localizedDescription
                 }
+            },
+            // The #19 entry point: open the session-start sheet pre-selecting
+            // the row it was invoked from — the subtask's ID, or the task's
+            // own ID for a task row (nil subtask).
+            startSession: { taskID, subtaskID in
+                sessionStartRequest = SessionStartRequest(
+                    preselectedTargetID: subtaskID ?? taskID)
             })
     }
 

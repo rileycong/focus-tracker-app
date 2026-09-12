@@ -221,7 +221,10 @@ final class AppModelTests: XCTestCase {
     func testPathChangeWhileSessionActiveIsRefusedAndStoresUnchanged() async throws {
         let model = await makeConfiguredModel()
         let vaultB = try makeSecondVault()
-        try model.startSession(taskID: UUID())
+        // The fixture's first task is In Progress: the #19 start flow's
+        // allowed no-op path — exactly what an "active session" needs.
+        let taskID = try XCTUnwrap(model.tasks.first?.id)
+        _ = try await model.startSession(taskID: taskID)
         XCTAssertEqual(model.sessionState, .running)
 
         let outcome = await model.setVaultPath(to: vaultB)
@@ -381,9 +384,15 @@ final class AppModelTests: XCTestCase {
 
     func testSessionPassthroughsTrackIdleRunningPausedIdle() async throws {
         let model = await makeConfiguredModel()
+        // The fixture's first task is In Progress: the #19 start flow's
+        // allowed no-op path.
         let taskID = try XCTUnwrap(model.tasks.first?.id)
 
-        try model.startSession(taskID: taskID)
+        let outcome = try await model.startSession(taskID: taskID)
+        guard case .started = outcome else {
+            XCTFail("expected .started, got \(outcome)")
+            return
+        }
         XCTAssertEqual(model.sessionState, .running)
         XCTAssertTrue(model.isSessionActive)
 

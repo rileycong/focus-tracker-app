@@ -19,13 +19,21 @@ struct FocusTrackerApp: App {
 
     var body: some Scene {
         WindowGroup {
-            // The app's default view (issue #15, PRD §8.2), styled dark and
-            // calm per PRD §21 (the root enforces `.dark`; the palette in
-            // `DesignTokens` is dark-first).
-            TasksView(model: model)
-                .task { await model.bootstrap() }
-                .preferredColorScheme(.dark)
-                .frame(minWidth: 640, minHeight: 420)
+            // The app-phase swap (issue #19, PRD §20.3): the start flow moves
+            // the app to the placeholder timer screen; ending it returns to
+            // the Tasks view. The `.task` bootstrap runs once per window —
+            // the phase swap replaces the content, not the window identity.
+            Group {
+                switch model.appPhase {
+                case .tasksView:
+                    TasksView(model: model)
+                case .timerView(let context):
+                    SessionTimerPlaceholderView(context: context, model: model)
+                }
+            }
+            .task { await model.bootstrap() }
+            .preferredColorScheme(.dark)
+            .frame(minWidth: 640, minHeight: 420)
         }
     }
 }

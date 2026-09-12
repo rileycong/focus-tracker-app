@@ -9,8 +9,11 @@ import UniformTypeIdentifiers
 /// nested add (#8 contract). `reorder` reorders one sibling list within the
 /// same parent (#18): `parentSubtaskID` nil = the task's top-level subtask
 /// list, non-nil = that subtask's children list, with the IDs in their new
-/// order (an exact permutation). Non-Sendable by design: formed and invoked
-/// on the main actor only.
+/// order (an exact permutation). `startSession` (#19) opens the
+/// session-start sheet pre-selecting the row it was invoked from: the task
+/// ID plus nil for a task row, plus the subtask's ID for a subtask row at
+/// any depth. Non-Sendable by design: formed and invoked on the main actor
+/// only.
 struct SubtaskActions {
     let add: (_ taskID: UUID, _ parentSubtaskID: UUID?) -> Void
     let edit: (_ taskID: UUID, _ subtask: SubtaskItem) -> Void
@@ -18,6 +21,7 @@ struct SubtaskActions {
     let reorder: (
         _ taskID: UUID, _ parentSubtaskID: UUID?, _ siblingIDsInNewOrder: [UUID]
     ) async -> Void
+    let startSession: (_ taskID: UUID, _ subtaskID: UUID?) -> Void
 }
 
 /// One node of a task's subtask tree (issue #17): title, subtle status dot
@@ -180,6 +184,15 @@ struct SubtaskRowView: View {
 
     @ViewBuilder
     private var contextMenu: some View {
+        // The #19 start entry point (nice-to-have preselection): only on
+        // planning-eligible rows — the start flow refuses the other statuses
+        // with a pinned reason, so the menu simply doesn't offer it.
+        if subtask.status.isPlanningEligible {
+            Button("Start Session…") {
+                actions.startSession(taskID, subtask.id)
+            }
+            Divider()
+        }
         Button("Add Subtask…") {
             actions.add(taskID, subtask.id)
         }

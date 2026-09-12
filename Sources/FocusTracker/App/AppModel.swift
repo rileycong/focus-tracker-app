@@ -67,8 +67,25 @@ import Observation
 /// actor stores are bridged with `await`, and the lock-synchronized
 /// coordinator is called directly from the main actor (its documented
 /// contract). Session lifecycle passthroughs are thin wrappers that keep the
-/// observable `sessionState` in step with the coordinator; the real
-/// start/end flows are #19/#22.
+/// observable `sessionState` in step with the coordinator; the real start
+/// flow is `startSession`/`startAdHocSession` (#19) and the real end flow is
+/// #22.
+///
+/// # Session start (issue #19, PRD §8.6, §9.1, §9.2, §20.3)
+/// `startSession(taskID:duration:)` orchestrates the whole START flow with
+/// the pinned refusal order — session already active → vault not configured
+/// → pending recovery unresolved → unknown target (`VaultStore.lookup` #6)
+/// → the #9 `VaultStore.startSession` transition (Blocked/Dropped/Done
+/// refused, In Progress an allowed no-op) → engine start via the
+/// `ActiveSessionCoordinator` (which persists the initial snapshot per #13's
+/// save-on-start cadence) → the observable app phase swaps to
+/// `.timerView(SessionContext)`. `startAdHocSession(title:categoryNames:
+/// duration:)` is the §8.6 ad-hoc path: the task is constructed caller-side
+/// with status `In Progress` (reusing #16's `TaskFormState` normalization)
+/// and created through the existing #7 `VaultStore.create(_:)` — no new
+/// creation API — then the session starts on it. Every decision refusal is a
+/// typed, `Equatable` `SessionStartOutcome` case (house style); only I/O
+/// failures that are not user decisions still throw.
 @MainActor
 @Observable
 public final class AppModel {
@@ -151,6 +168,87 @@ public final class AppModel {
         case noVaultConfigured
     }
 
+    /// The display context of a running session (issue #19, PRD §9.1: a
+    /// session links to exactly one task/subtask): the linked target's ID
+    /// plus the resolved display fields the timer screens (#19 placeholder,
+    /// #20) show. Subtasks inherit project/categories from their parent task
+    /// (PRD §5.4), resolved at start time. `Equatable` so tests and the
+    /// app-phase state can compare exactly.
+    public struct SessionContext: Equatable, Sendable {
+        /// The session's linked task/subtask ID — the same ID the engine
+        /// carries (the eventual §13 log's `task_id`).
+        public let taskID: UUID
+        /// The target's own title.
+        public let title: String
+        /// The owning top-level task's title; nil when the target **is** a
+        /// top-level task.
+        public let parentTaskTitle: String?
+        /// The effective project (subtasks inherit, PRD §5.4).
+        public let project: Project?
+        /// The effective categories (subtasks inherit, PRD §5.4).
+        public let categories: [Category]
+    }
+
+    /// The observable app phase (issue #19, PRD §20.3): which screen the app
+    /// shows. The start flow swaps to `.timerView` on success; `endSession`
+    /// returns to `.tasksView` (the #19 placeholder's minimal end path —
+    /// #22 owns the real end-of-session flow). The recovery choices
+    /// (`restorePendingSession`/`discardPendingSession`) deliberately do not
+    /// touch the phase: the actual resume/end choice UI is #20/#22, which
+    /// will drive the phase from their own flows.
+    public enum AppPhase: Equatable, Sendable {
+        case tasksView
+        case timerView(SessionContext)
+    }
+
+    /// The typed outcome of the #19 start orchestration (`Equatable` for
+    /// exact-case assertions — house style, per `VaultPathChangeOutcome`).
+    /// Decision refusals are returned, never thrown, so the
+    /// `SessionStartView` sheet can surface them inline; only non-decision
+    /// I/O failures (vault write-through, snapshot persistence) still throw.
+    public enum SessionStartOutcome: Equatable, Sendable {
+        /// The session is running and the app phase is
+        /// `.timerView(context)`.
+        case started(SessionContext)
+        /// Refused for the pinned reason (see `SessionStartRefusal`);
+        /// nothing was written and no engine was started.
+        case refused(SessionStartRefusal)
+    }
+
+    /// The pinned refusal vocabulary of the #19 start orchestration, in the
+    /// pinned check order (session already active → vault not configured →
+    /// pending recovery unresolved → unknown target → #9 status refusal →
+    /// ad-hoc validation/creation). Each case is distinct so the sheet can
+    /// show a specific inline reason and tests can assert the exact case.
+    public enum SessionStartRefusal: Equatable, Sendable {
+        /// A session lifecycle is already open (running or paused) — the UI
+        /// shows the running timer instead of the start flow (PRD §9.1).
+        case sessionAlreadyActive
+        /// No vault path is configured (`vaultStore == nil` fails closed,
+        /// PRD §18).
+        case vaultNotConfigured
+        /// A recovered snapshot awaits the user's restore/discard choice
+        /// (#14 `pendingSessionRecovery != nil`); a new session cannot start
+        /// until it is resolved.
+        case pendingRecoveryUnresolved
+        /// The target ID is not in the loaded inventory (`VaultStore.lookup`
+        /// #6 `.notFound`) — a distinct typed case, never an empty-set
+        /// no-op masquerade (#9 contract).
+        case unknownTarget(UUID)
+        /// The #9 `VaultStore.startSession` transition refused the target:
+        /// `Blocked` (manual unblock first), `Dropped` (manual restore only)
+        /// or `Done` (nothing to work on). Carries the target ID and the
+        /// pinned `StatusTransition.Refusal` reason.
+        case targetRefused(UUID, StatusTransition.Refusal)
+        /// The ad-hoc task failed validation (PRD §8.6: a title and at
+        /// least one category are required — the sheet enforces it live,
+        /// the model fails closed the same way).
+        case adHocTaskInvalid
+        /// The ad-hoc creation write failed (`VaultStore.create` #7 typed
+        /// error unchanged — e.g. `.vaultChangedExternally`).
+        case adHocCreationFailed(VaultStoreError)
+    }
+
     // MARK: - Owned layers
 
     /// The task store for the configured vault; nil until a vault path is
@@ -186,6 +284,10 @@ public final class AppModel {
     /// non-nil exactly while a recovered snapshot awaits the user's
     /// restore/discard choice. nil = no pending decision.
     public private(set) var pendingSessionRecovery: ActiveSessionSnapshot?
+    /// Which screen the app shows (see `AppPhase`, issue #19). Starts on the
+    /// Tasks view; the #19 start flow swaps it to `.timerView` and
+    /// `endSession` swaps it back.
+    public private(set) var appPhase: AppPhase = .tasksView
 
     // MARK: - Init
 
@@ -508,16 +610,190 @@ public final class AppModel {
         return updated
     }
 
-    // MARK: - Active session passthroughs (thin; real flows are #19/#22)
+    // MARK: - Session start (issue #19, PRD §8.6, §9.1, §9.2, §20.3)
 
-    /// Starts a session (coordinator passthrough) and tracks the observable
-    /// state. Throws the coordinator's/engine's typed transition errors.
+    /// Starts a focus session on an existing task or subtask — the #19
+    /// START orchestration over the picked target, with the pinned refusal
+    /// order. Each step is a distinct typed case on the returned
+    /// `SessionStartOutcome`; nothing silent:
+    ///
+    /// 1. **Session already active** → `.refused(.sessionAlreadyActive)`.
+    /// 2. **Vault not configured** → `.refused(.vaultNotConfigured)` (fails
+    ///    closed, PRD §18).
+    /// 3. **Pending recovery unresolved** (#14) →
+    ///    `.refused(.pendingRecoveryUnresolved)`; the user resolves the
+    ///    pending snapshot via `restorePendingSession()` /
+    ///    `discardPendingSession()` first.
+    /// 4. **Target resolution** via `VaultStore.lookup(_:)` (#6: a subtask
+    ///    at any depth, or a top-level task) — an unknown ID is its own
+    ///    typed case `.unknownTarget`, never an empty-set masquerade (#9).
+    /// 5. **#9 `VaultStore.startSession(_:)` transition**: To Do → In
+    ///    Progress write-through (whole-file atomic write); In Progress →
+    ///    allowed no-op (the session proceeds); Blocked/Dropped/Done →
+    ///    `.refused(.targetRefused(_:reason))` — the sheet surfaces the
+    ///    reason inline.
+    /// 6. **Engine start** via the `ActiveSessionCoordinator` passthrough,
+    ///    which persists the initial snapshot (#13 save-on-start cadence).
+    /// 7. **App phase** swaps to `.timerView(SessionContext)` with the
+    ///    resolved title/project/categories (`FocusTrackerApp` swaps
+    ///    screens on it; the placeholder timer is #19's, the real one #20's).
+    ///
+    /// Steps 1–3 and 4–5 share one implementation each
+    /// (`startPrerequisitesRefusal()` / the #9 store wrapper), and
+    /// `startAdHocSession` reuses both, so the pinned order cannot drift
+    /// between the two entry points.
+    ///
+    /// - Parameters:
+    ///   - taskID: The picked task/subtask ID.
+    ///   - duration: The session length in seconds (PRD §9.2 default 25
+    ///     minutes; the sheet enforces the positive-integer rule on its
+    ///     minutes field — the model trusts the engine's own contract).
+    /// - Throws: Only non-decision I/O failures, unchanged: the store's
+    ///   `VaultStoreError` (e.g. `.vaultChangedExternally` on the transition
+    ///   write — the status change stands, the retry then takes the
+    ///   In-Progress no-op path) and the coordinator's snapshot-persistence
+    ///   error. Neither is a user decision, so both stay thrown (house
+    ///   style: typed outcomes only *where a user decision is involved*).
+    @discardableResult
     public func startSession(
         taskID: UUID,
         duration: TimeInterval = FocusSessionEngine.defaultDurationSeconds
-    ) throws {
+    ) async throws -> SessionStartOutcome {
+        if let refusal = startPrerequisitesRefusal() { return .refused(refusal) }
+        guard let store = vaultStore else {
+            // Same check the preamble just made — narrowed for flow typing.
+            return .refused(.vaultNotConfigured)
+        }
+
+        // Step 4: target resolution (subtask at any depth or top-level task).
+        let context: SessionContext
+        switch await store.lookup(taskID) {
+        case .task(let task):
+            context = SessionContext(
+                taskID: task.id, title: task.title, parentTaskTitle: nil,
+                project: task.project, categories: task.categories)
+        case .subtask(let subtask, in: let parent):
+            context = SessionContext(
+                taskID: subtask.id, title: subtask.title,
+                parentTaskTitle: parent.title, project: parent.project,
+                categories: parent.categories)
+        case .notFound:
+            return .refused(.unknownTarget(taskID))
+        }
+
+        // Step 5: the #9 startSession transition. `.transitioned` covers both
+        // allowed shapes — the non-empty To Do → In Progress change set and
+        // the empty In-Progress no-op set (the session proceeds either way).
+        let outcome = try await store.startSession(taskID)
+        switch outcome {
+        case .transitioned:
+            break
+        case .refused(let reason):
+            return .refused(.targetRefused(taskID, reason))
+        case .unknownID(let unknown):
+            // Defensive: the lookup above proved existence, so this only
+            // fires on an inventory divergence mid-flow — surfaced as the
+            // same typed unknown case, never a masquerade (#9 contract).
+            return .refused(.unknownTarget(unknown))
+        }
+        // Keep the observable inventory in step after a status write-through
+        // (a no-op change set writes nothing, so this is a cheap mirror).
+        await mirrorSyncedInventory(from: store)
+
+        return try beginEngineSession(
+            onTask: taskID, context: context, duration: duration)
+    }
+
+    /// Starts a focus session on a **new ad-hoc task** (issue #19, PRD
+    /// §8.6): the task is constructed caller-side with status `In Progress`
+    /// — the documented ad-hoc path (`StatusTransition` header, #9: no new
+    /// creation API) — and created through the existing #7
+    /// `VaultStore.create(_:)` (one Markdown file, atomic write, synced
+    /// inventory), then the session starts on the new task's ID.
+    ///
+    /// The pinned refusal order's first three cases are shared with
+    /// `startSession` (already active → not configured → pending recovery);
+    /// the ad-hoc-specific steps follow: title/category validation (PRD
+    /// §8.6 — a title and at least one category required; normalization
+    /// **reuses #16's `TaskFormState` token logic verbatim** — trim,
+    /// case-insensitive dedupe) fails closed as `.adHocTaskInvalid`, and a
+    /// failed creation write surfaces as `.adHocCreationFailed(storeError)`
+    /// with nothing started.
+    ///
+    /// - Parameters:
+    ///   - title: The raw ad-hoc title (trimmed here, as the #16 form does).
+    ///   - categoryNames: The raw category tokens (normalized through
+    ///     `TaskFormState.commitCategory`).
+    ///   - duration: The session length in seconds (default 25 minutes,
+    ///     PRD §9.2).
+    /// - Throws: As on `startSession` — only non-decision I/O failures.
+    @discardableResult
+    public func startAdHocSession(
+        title: String,
+        categoryNames: [String],
+        duration: TimeInterval = FocusSessionEngine.defaultDurationSeconds
+    ) async throws -> SessionStartOutcome {
+        if let refusal = startPrerequisitesRefusal() { return .refused(refusal) }
+        guard let store = vaultStore else {
+            return .refused(.vaultNotConfigured)
+        }
+
+        // Ad-hoc validation through the #16 form-state logic: the same
+        // trimming/dedupe the task form applies, with the status pinned to
+        // In Progress (PRD §8.6 / #9's documented ad-hoc construction).
+        var form = TaskFormState()
+        form.title = title
+        for name in categoryNames { form.commitCategory(name) }
+        form.status = .inProgress
+        guard form.hasValidTitle, form.hasValidCategories else {
+            return .refused(.adHocTaskInvalid)
+        }
+        let task: TaskItem
+        do {
+            task = try form.makeTask(preserving: nil)
+        } catch {
+            // Unreachable with the guards above (the only thrown case is
+            // the empty-categories one); failed-closed rather than forced.
+            return .refused(.adHocTaskInvalid)
+        }
+
+        let created: TaskItem
+        do {
+            created = try await store.create(task)
+        } catch let error as VaultStoreError {
+            return .refused(.adHocCreationFailed(error))
+        }
+        await mirrorSyncedInventory(from: store)
+
+        let context = SessionContext(
+            taskID: created.id, title: created.title, parentTaskTitle: nil,
+            project: created.project, categories: created.categories)
+        return try beginEngineSession(
+            onTask: created.id, context: context, duration: duration)
+    }
+
+    /// The shared pinned-refusal preamble (issue #19's check order, steps
+    /// 1–3): session already active → vault not configured → pending
+    /// recovery unresolved. `nil` = all three passed.
+    private func startPrerequisitesRefusal() -> SessionStartRefusal? {
+        if coordinator.isActive { return .sessionAlreadyActive }
+        if vaultStore == nil { return .vaultNotConfigured }
+        if pendingSessionRecovery != nil { return .pendingRecoveryUnresolved }
+        return nil
+    }
+
+    /// The shared engine-start tail (issue #19 steps 6–7): coordinator start
+    /// (persisting the initial snapshot per #13's save-on-start cadence),
+    /// the observable session-state tracking, and the app-phase swap.
+    /// Snapshot-persistence failures are not user decisions — they throw
+    /// unchanged (see `startSession`'s error contract).
+    private func beginEngineSession(
+        onTask taskID: UUID, context: SessionContext, duration: TimeInterval
+    ) throws -> SessionStartOutcome {
         try coordinator.start(taskID: taskID, duration: duration)
         sessionState = .running
+        appPhase = .timerView(context)
+        return .started(context)
     }
 
     /// Pauses (coordinator passthrough) and tracks the observable state.
@@ -533,12 +809,14 @@ public final class AppModel {
     }
 
     /// Ends the session (coordinator passthrough: engine result + snapshot
-    /// clear) and returns to idle. The result feeds #22's end-of-session
-    /// composition.
+    /// clear) and returns to idle, swapping the app phase back to
+    /// `.tasksView` (the #19 placeholder's minimal end path — #22 owns the
+    /// real end-of-session flow and will compose its own).
     @discardableResult
     public func endSession() throws -> FocusSessionResult {
         let result = try coordinator.end()
         sessionState = .idle
+        appPhase = .tasksView
         return result
     }
 
