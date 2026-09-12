@@ -457,6 +457,57 @@ public final class AppModel {
         await mirrorSyncedInventory(from: store)
     }
 
+    // MARK: - Manual reorder passthroughs (issue #18, PRD §8.4)
+
+    /// Applies a changed-only batch of `ID → new order` updates through
+    /// `VaultStore.applyOrdering(groupUpdates:)` (#10) and returns the updated
+    /// tasks. The UI derives the batch via `TaskOrdering.reorder` from the
+    /// group's display order (drag) or a neighbor swap (keyboard) — one
+    /// pipeline for every entry point (pinned, #18); an empty map writes
+    /// nothing.
+    ///
+    /// Errors surface typed exactly as on `createTask`: `.noVaultConfigured`
+    /// when there is no store to write through, and the store's own
+    /// `VaultStoreError` (e.g. `.vaultChangedExternally`,
+    /// `.orderingBatchIncomplete`, `.unknownTaskID`, `.reorderNotExactPermutation`,
+    /// `.writeFailed`) unchanged on any failure — on which nothing new is
+    /// written and the observable state is untouched.
+    ///
+    /// On success the exposed `tasks`/`vaultState` are refreshed from the
+    /// store's already-synced inventory (`mirrorSyncedInventory(from:)` — the
+    /// pinned apply-then-re-render choice, #18: no optimistic local reorder,
+    /// no reload, no second disk read).
+    @discardableResult
+    public func reorderTasks(groupUpdates: [UUID: Int]) async throws -> [TaskItem] {
+        guard let store = vaultStore else { throw TaskWriteError.noVaultConfigured }
+        let updated = try await store.applyOrdering(groupUpdates: groupUpdates)
+        await mirrorSyncedInventory(from: store)
+        return updated
+    }
+
+    /// Reorders exactly one subtask sibling list through
+    /// `VaultStore.reorderSubtasks(parentID:parentSubtaskID:
+    /// siblingIDsInNewOrder:)` (#8) and returns the updated parent task.
+    /// `parentSubtaskID: nil` reorders the task's top-level subtask list; a
+    /// non-nil ID reorders that subtask's children at any depth. The moved
+    /// node's whole subtree travels with it (unchanged #8 semantics); the ID
+    /// list must be an exact permutation of the targeted list.
+    ///
+    /// Errors and the observable-state refresh exactly as on `reorderTasks`
+    /// (`.noVaultConfigured`, store errors typed unchanged, apply-then-
+    /// re-render from the already-synced inventory — no optimistic reorder).
+    @discardableResult
+    public func reorderSubtasks(
+        parentID: UUID, parentSubtaskID: UUID? = nil, siblingIDsInNewOrder: [UUID]
+    ) async throws -> TaskItem {
+        guard let store = vaultStore else { throw TaskWriteError.noVaultConfigured }
+        let updated = try await store.reorderSubtasks(
+            parentID: parentID, parentSubtaskID: parentSubtaskID,
+            siblingIDsInNewOrder: siblingIDsInNewOrder)
+        await mirrorSyncedInventory(from: store)
+        return updated
+    }
+
     // MARK: - Active session passthroughs (thin; real flows are #19/#22)
 
     /// Starts a session (coordinator passthrough) and tracks the observable

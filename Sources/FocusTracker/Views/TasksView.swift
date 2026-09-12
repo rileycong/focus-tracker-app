@@ -1,4 +1,5 @@
 import SwiftUI
+import UniformTypeIdentifiers
 
 /// The app's default view (issue #15, PRD §8.2): the read-only task inventory
 /// grouped per PRD §8.3, driven by the #14 composition root. Rendering and
@@ -20,6 +21,14 @@ struct TasksView: View {
     /// reported here (the inventory is untouched on failure — nothing is
     /// silently lost, PRD §18).
     @State private var deleteErrorMessage: String?
+    /// The #18 reorder error surface: any `reorderTasks`/`reorderSubtasks`
+    /// failure — `.vaultChangedExternally`, `.orderingBatchIncomplete`,
+    /// `.reorderNotExactPermutation`, `.writeFailed`, `.noVaultConfigured`, …
+    /// — surfaces here as a non-blocking alert (consistent with the #17
+    /// delete-error surface) with a Reload action calling `reloadVault()`.
+    /// Success never touches it; the store guarantees nothing is lost on a
+    /// failure (PRD §18), so this is a report, not a recovery requirement.
+    @State private var reorderErrorMessage: String?
 
     /// - Parameter model: The #14 composition root. The view model starts
     ///   from `model.tasks` (empty before the first load) and is kept in step
@@ -105,6 +114,22 @@ struct TasksView: View {
         } message: {
             Text(deleteErrorMessage ?? "")
         }
+        .alert(
+            "Could not reorder",
+            isPresented: Binding(
+                get: { reorderErrorMessage != nil },
+                set: { if !$0 { reorderErrorMessage = nil } })
+        ) {
+            Button("Reload") {
+                reorderErrorMessage = nil
+                Task { await model.reloadVault() }
+            }
+            Button("OK", role: .cancel) {
+                reorderErrorMessage = nil
+            }
+        } message: {
+            Text(reorderErrorMessage ?? "")
+        }
     }
 
     // MARK: - Loaded (the actual task inventory)
@@ -120,6 +145,27 @@ struct TasksView: View {
             } else {
                 taskList
             }
+        }
+        // The #18 keyboard alternative for the *selected* task: ⌘⇧↑ / ⌘⇧↓
+        // move it within its group's display order. The shortcuts live on
+        // hidden buttons (the standard macOS key-equivalent pattern) so they
+        // work outside the row context menu; no selection or a group boundary
+        // is a typed no-op. The context menu's Move Up/Down run the same
+        // handler.
+        .background {
+            Group {
+                Button("Move Task Up") {
+                    moveSelectedTask(up: true)
+                }
+                .keyboardShortcut(.upArrow, modifiers: [.command, .shift])
+                Button("Move Task Down") {
+                    moveSelectedTask(up: false)
+                }
+                .keyboardShortcut(.downArrow, modifiers: [.command, .shift])
+            }
+            .opacity(0)
+            .frame(width: 0, height: 0)
+            .accessibilityHidden(true)
         }
         .toolbar {
             ToolbarItem {
@@ -207,6 +253,27 @@ struct TasksView: View {
         DisclosureGroup(isExpanded: viewModel.expandedBinding(forKey: group.collapseKey)) {
             ForEach(group.tasks) { task in
                 TaskRowView(task: task, viewModel: viewModel, subtaskActions: subtaskActions)
+                    // #18 drag reorder (within-group only): dragging carries
+                    // the task's ID; dropping onto a row of this group reorders
+                    // the dragged task to that row's position in the group's
+                    // display order. The handler below rejects any ID outside
+                    // `group.tasks` — a task belongs to exactly one (project,
+                    // status) group, so membership proves the drop stayed
+                    // within the source group; every other drop is the pinned
+                    // no-op (no container-level drop target exists either).
+                    .onDrag {
+                        NSItemProvider(object: task.id.uuidString as NSString)
+                    }
+                    .onDrop(
+                        of: [UTType.text],
+                        delegate: RowDropDelegate(
+                            destinationIndex: group.tasks.firstIndex(where: {
+                                $0.id == task.id
+                            }) ?? 0,
+                            onDrop: { draggedID, destinationIndex in
+                                await applyTaskReorder(
+                                    dropping: draggedID, at: destinationIndex, in: group)
+                            }))
                     .contextMenu {
                         Button("New Task…") {
                             formRequest = TaskFormRequest(mode: .create)
@@ -219,6 +286,18 @@ struct TasksView: View {
                         }
                         Button("Edit Task…") {
                             formRequest = TaskFormRequest(mode: .edit(task))
+                        }
+                        Divider()
+                        // The #18 keyboard alternative for this row: a
+                        // neighbor swap through the same pipeline as drag
+                        // (⌘⇧↑ / ⌘⇧↓ also act on the selected task via the
+                        // hidden shortcuts above). Typed no-op at the group
+                        // boundary — nil, never a wrap-around.
+                        Button("Move Up") {
+                            moveTask(task, up: true, in: group)
+                        }
+                        Button("Move Down") {
+                            moveTask(task, up: false, in: group)
                         }
                     }
             }
@@ -294,13 +373,16 @@ struct TasksView: View {
         }
     }
 
-    // MARK: - Subtask form entries (issue #17)
+    // MARK: - Subtask form entries (issues #17 + #18)
 
-    /// The add/edit/delete entry points the task and subtask rows' context
-    /// menus expose, wired to the `AppModel` passthroughs. `add` maps a
-    /// nil `parentSubtaskID` to a task-level add and any subtask's ID to a
+    /// The add/edit/delete/reorder entry points the task and subtask rows'
+    /// context menus expose, wired to the `AppModel` passthroughs. `add` maps
+    /// a nil `parentSubtaskID` to a task-level add and any subtask's ID to a
     /// nested add under it (#8); `delete` surfaces a store failure through
-    /// the delete alert (the dialog itself closes either way).
+    /// the delete alert (the dialog itself closes either way); `reorder`
+    /// (#18) reorders one sibling list in place — the caller guarantees the
+    /// ID list is an exact permutation of that list — and surfaces a store
+    /// failure through the reorder alert.
     private var subtaskActions: SubtaskActions {
         SubtaskActions(
             add: { taskID, parentSubtaskID in
@@ -318,7 +400,98 @@ struct TasksView: View {
                 } catch {
                     deleteErrorMessage = error.localizedDescription
                 }
+            },
+            reorder: { taskID, parentSubtaskID, siblingIDsInNewOrder in
+                do {
+                    try await model.reorderSubtasks(
+                        parentID: taskID, parentSubtaskID: parentSubtaskID,
+                        siblingIDsInNewOrder: siblingIDsInNewOrder)
+                } catch {
+                    reorderErrorMessage = error.localizedDescription
+                }
             })
+    }
+
+    // MARK: - Manual task reordering (issue #18, PRD §8.4)
+
+    /// The one task-reorder pipeline for every entry point (pinned, #18):
+    /// **drag and keyboard compose the same arithmetic → `TaskOrdering.reorder`
+    /// → `AppModel.reorderTasks` → `VaultStore.applyOrdering` chain.**
+    ///
+    /// Drag entry point: validates the pinned within-group-only scope (the
+    /// dragged ID must already be in this group — a task belongs to exactly
+    /// one (project, status) group, so anything else, including a drop aimed
+    /// at another group's row, is a no-op) and derives the new ordering with
+    /// the pinned remove-then-insert semantics. No optimistic UI: the list
+    /// re-renders from `model.tasks` once the store's already-synced
+    /// inventory is mirrored back (see `persistTaskReorder`).
+    private func applyTaskReorder(
+        dropping draggedID: UUID, at destinationIndex: Int, in group: TaskStatusGroup
+    ) async {
+        let groupIDs = group.tasks.map(\.id)
+        guard groupIDs.contains(draggedID),
+            let newOrder = ReorderArithmetic.newOrder(
+                moving: draggedID, to: destinationIndex, in: groupIDs)
+        else { return }
+        await persistTaskReorder(in: group, newOrder: newOrder)
+    }
+
+    /// Persists one new group ordering: `TaskOrdering.reorder` over the
+    /// group's currently persisted `order` values (as displayed) produces the
+    /// changed-only `[UUID: Int]`; an empty change set (a no-op drop) writes
+    /// nothing. The UI re-renders from the store's synced inventory — the
+    /// pinned apply-then-re-render choice (#18; `AppModel.reorderTasks`
+    /// mirrors `VaultStore`'s post-write inventory into `model.tasks`, and the
+    /// view's `.onChange` rebuilds the sections — no local reorder, no reload).
+    /// Any failure surfaces through the non-blocking reorder alert with its
+    /// Reload action; success never touches it.
+    private func persistTaskReorder(in group: TaskStatusGroup, newOrder: [UUID]) async {
+        let currentIDs = group.tasks.map(\.id)
+        let currentOrders = Dictionary(
+            uniqueKeysWithValues: group.tasks.map { ($0.id, $0.order) })
+        let updates: [UUID: Int]
+        do {
+            updates = try TaskOrdering.reorder(
+                currentDisplayOrder: currentIDs, newOrder: newOrder,
+                currentOrders: currentOrders)
+        } catch {
+            // Unreachable for UI-derived input (`ReorderArithmetic` produces
+            // exact permutations by construction — tested); surfaced rather
+            // than silently dropped (PRD §18).
+            reorderErrorMessage = error.localizedDescription
+            return
+        }
+        guard !updates.isEmpty else { return }
+        do {
+            _ = try await model.reorderTasks(groupUpdates: updates)
+        } catch {
+            reorderErrorMessage = error.localizedDescription
+        }
+    }
+
+    /// The context-menu Move Up / Move Down (and the ⌘⇧↑ / ⌘⇧↓ shortcuts'
+    /// target): a neighbor swap in the group's display order — a reorder whose
+    /// destination index comes from the neighbor, through the exact same
+    /// pipeline as drag (pinned, #18). A boundary (first/last row) is a typed
+    /// no-op: the swap helper returns nil, never a wrap-around.
+    private func moveTask(_ task: TaskItem, up: Bool, in group: TaskStatusGroup) {
+        let groupIDs = group.tasks.map(\.id)
+        guard let newOrder = up
+            ? ReorderArithmetic.swapUp(task.id, in: groupIDs)
+            : ReorderArithmetic.swapDown(task.id, in: groupIDs)
+        else { return }
+        Task { await persistTaskReorder(in: group, newOrder: newOrder) }
+    }
+
+    /// The ⌘⇧↑ / ⌘⇧↓ shortcut handler: moves the *selected* task within its
+    /// group. No selection, a hidden group (Done/Dropped filter), or a group
+    /// boundary is a no-op.
+    private func moveSelectedTask(up: Bool) {
+        guard let selectedID = viewModel.selectedTaskID,
+            let group = viewModel.group(containing: selectedID),
+            let task = group.tasks.first(where: { $0.id == selectedID })
+        else { return }
+        moveTask(task, up: up, in: group)
     }
 
     // MARK: - Task form entries (issue #16)

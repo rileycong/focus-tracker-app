@@ -105,4 +105,17 @@ public final class TasksViewModel {
     public func isSelected(_ id: UUID) -> Bool {
         selectedTaskID == id
     }
+
+    /// The (project, status) group containing the task with `id` — the scope
+    /// the #18 keyboard reorder (⌘⇧↑ / ⌘⇧↓ on the selected task) derives its
+    /// swap from. Derived from `sections`, so it reflects the exact groups the
+    /// view renders (Done/Dropped filter applied). nil = not displayed.
+    public func group(containing id: UUID) -> TaskStatusGroup? {
+        for section in sections {
+            for group in section.groups where group.tasks.contains(where: { $0.id == id }) {
+                return group
+            }
+        }
+        return nil
+    }
 }

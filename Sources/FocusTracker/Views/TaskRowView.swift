@@ -34,6 +34,8 @@ struct TaskRowView: View {
                     ForEach(task.subtasks) { subtask in
                         SubtaskRowView(
                             taskID: task.id, subtask: subtask,
+                            parentSubtaskID: nil,
+                            siblingIDs: task.subtasks.map(\.id),
                             viewModel: viewModel, actions: subtaskActions)
                     }
                 }

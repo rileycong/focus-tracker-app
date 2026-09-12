@@ -1,15 +1,23 @@
 import SwiftUI
+import UniformTypeIdentifiers
 
-/// The add/edit/delete entry points a subtask tree exposes (issue #17),
-/// wired by `TasksView` to the `AppModel` passthroughs (`addSubtask` /
-/// `updateSubtask` / `deleteSubtask`). `add` receives the top-level task ID
-/// (whose file the write lands in) and the parent subtask's ID — nil for a
-/// task-level add, the subtask's ID for a nested add (#8 contract).
-/// Non-Sendable by design: formed and invoked on the main actor only.
+/// The add/edit/delete/reorder entry points a subtask tree exposes (issues
+/// #17 + #18), wired by `TasksView` to the `AppModel` passthroughs
+/// (`addSubtask` / `updateSubtask` / `deleteSubtask` / `reorderSubtasks`).
+/// `add` receives the top-level task ID (whose file the write lands in) and
+/// the parent subtask's ID — nil for a task-level add, the subtask's ID for a
+/// nested add (#8 contract). `reorder` reorders one sibling list within the
+/// same parent (#18): `parentSubtaskID` nil = the task's top-level subtask
+/// list, non-nil = that subtask's children list, with the IDs in their new
+/// order (an exact permutation). Non-Sendable by design: formed and invoked
+/// on the main actor only.
 struct SubtaskActions {
     let add: (_ taskID: UUID, _ parentSubtaskID: UUID?) -> Void
     let edit: (_ taskID: UUID, _ subtask: SubtaskItem) -> Void
     let delete: (_ taskID: UUID, _ subtask: SubtaskItem) async -> Void
+    let reorder: (
+        _ taskID: UUID, _ parentSubtaskID: UUID?, _ siblingIDsInNewOrder: [UUID]
+    ) async -> Void
 }
 
 /// One node of a task's subtask tree (issue #17): title, subtle status dot
@@ -40,6 +48,13 @@ struct SubtaskRowView: View {
     /// #8 takes `(parent task ID, subtask ID)` paths).
     let taskID: UUID
     let subtask: SubtaskItem
+    /// The sibling-list context this node renders in (#18): the IDs of the
+    /// list, in current display order, and the parent whose list it is — nil
+    /// for the task's top-level subtask list, the parent subtask's ID for any
+    /// nested list. Drag/keyboard reorders stay within exactly this list
+    /// (pinned); the moved node's subtree travels with it (#8 semantics).
+    let parentSubtaskID: UUID?
+    let siblingIDs: [UUID]
     let viewModel: TasksViewModel
     let actions: SubtaskActions
 
@@ -63,6 +78,8 @@ struct SubtaskRowView: View {
                     ForEach(subtask.children) { child in
                         SubtaskRowView(
                             taskID: taskID, subtask: child,
+                            parentSubtaskID: subtask.id,
+                            siblingIDs: subtask.children.map(\.id),
                             viewModel: viewModel, actions: actions)
                     }
                 }
@@ -125,6 +142,23 @@ struct SubtaskRowView: View {
         .padding(.vertical, DesignTokens.rowVerticalPadding)
         .padding(.horizontal, DesignTokens.spacingS)
         .contentShape(Rectangle())
+        // #18 drag reorder: the drop target is this row; a drop lands the
+        // dragged sibling at this row's position in this sibling list (see
+        // `RowDropDelegate`). Cross-parent drops are the pinned no-op — the
+        // membership check in the handler below rejects any ID outside
+        // `siblingIDs`.
+        .onDrag { NSItemProvider(object: subtask.id.uuidString as NSString) }
+        .onDrop(
+            of: [UTType.text],
+            delegate: RowDropDelegate(
+                destinationIndex: siblingIDs.firstIndex(of: subtask.id) ?? 0,
+                onDrop: { draggedID, destinationIndex in
+                    guard siblingIDs.contains(draggedID),
+                        let newOrder = ReorderArithmetic.newOrder(
+                            moving: draggedID, to: destinationIndex, in: siblingIDs)
+                    else { return }
+                    await actions.reorder(taskID, parentSubtaskID, newOrder)
+                }))
         .contextMenu { contextMenu }
         .confirmationDialog(
             deleteConfirmationTitle,
@@ -142,7 +176,7 @@ struct SubtaskRowView: View {
         }
     }
 
-    // MARK: - Context menu (add / edit / delete, issue #17)
+    // MARK: - Context menu (add / edit / delete / reorder, issues #17 + #18)
 
     @ViewBuilder
     private var contextMenu: some View {
@@ -154,6 +188,20 @@ struct SubtaskRowView: View {
         }
         Button("Delete Subtask…", role: .destructive) {
             confirmingDelete = true
+        }
+        Divider()
+        // Keyboard alternative for the sibling-list reorder (#18): a neighbor
+        // swap through the same pipeline as drag. Typed no-op at the list
+        // boundary (nil — never a wrap-around).
+        Button("Move Up") {
+            guard let newOrder = ReorderArithmetic.swapUp(subtask.id, in: siblingIDs)
+            else { return }
+            Task { await actions.reorder(taskID, parentSubtaskID, newOrder) }
+        }
+        Button("Move Down") {
+            guard let newOrder = ReorderArithmetic.swapDown(subtask.id, in: siblingIDs)
+            else { return }
+            Task { await actions.reorder(taskID, parentSubtaskID, newOrder) }
         }
     }
 
