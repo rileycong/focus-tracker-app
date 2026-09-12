@@ -56,12 +56,33 @@ enum TimerDisplay {
     }
 
     /// The ring trim fraction (PRD §10.1): the engine's `progressFraction`
-    /// clamped to 0…1 (1 == expired). The view draws the remaining arc from
-    /// this offset to 1, so the ring visibly shrinks as time passes. The
-    /// engine already clamps; this is the display-side guarantee.
+    /// clamped to 0…1 (1 == expired) — the remaining arc's start offset while
+    /// time remains. The engine already clamps; this is the display-side
+    /// guarantee.
     static func ringTrim(progressFraction: Double) -> Double {
         min(1, max(0, progressFraction))
     }
+
+    /// The remaining arc's `(from, to)` trim range (PRD §10.1, issue #20):
+    /// while time remains (`progress < 1`) the arc runs from the clamped
+    /// progress offset to 1 — the ring shrinks as time passes. **At expiry
+    /// (`progress >= 1`) the arc is the FULL circle (0→1)** so the ring
+    /// visibly completes into the subtle "done" color: a naive
+    /// `trim(from: 1, to: 1)` would be a zero-length empty arc and the ring
+    /// would vanish (QA regression on #20, pinned by `TimerDisplayTests`).
+    static func ringArc(progressFraction: Double) -> RingArc {
+        let clamped = ringTrim(progressFraction: progressFraction)
+        return clamped >= 1 ? RingArc(from: 0, to: 1) : RingArc(from: clamped, to: 1)
+    }
+}
+
+/// The remaining arc's trim range the ring renders for one tick (issue #20):
+/// a plain `(from, to)` pair as an `Equatable` value so the view can animate
+/// on it and the tests can pin the exact geometry (fresh / mid-range /
+/// expired full circle).
+struct RingArc: Equatable {
+    let from: Double
+    let to: Double
 }
 
 /// The complete display state the timer view renders for one tick (issue #20,
@@ -78,8 +99,9 @@ struct TimerDisplayState: Equatable {
     let remainingSeconds: Int
     /// The formatted countdown (see `TimerDisplay.countdownText`).
     let countdownText: String
-    /// Clamped progress → ring trim (see `TimerDisplay.ringTrim`).
-    let ringTrim: Double
+    /// The remaining arc's trim range (see `TimerDisplay.ringArc`): shrinking
+    /// with progress while time remains, the FULL circle (0→1) at expiry.
+    let ringArc: RingArc
     /// True once remaining hits 0 — the pinned #12 expiry semantics: the
     /// engine clamps `remainingSeconds` at 0 exactly when focused time
     /// reaches the configured duration, so for an active session
@@ -102,7 +124,7 @@ struct TimerDisplayState: Equatable {
         return TimerDisplayState(
             remainingSeconds: remaining,
             countdownText: TimerDisplay.countdownText(remainingSeconds: remaining),
-            ringTrim: TimerDisplay.ringTrim(progressFraction: progressFraction),
+            ringArc: TimerDisplay.ringArc(progressFraction: progressFraction),
             isExpired: remaining == 0,
             isPaused: isPaused)
     }

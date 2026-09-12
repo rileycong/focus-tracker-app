@@ -44,7 +44,10 @@ import SwiftUI
 ///
 /// # Expiry (pinned #12 semantics, issue #20 criterion 7)
 /// When remaining hits 0 the ring completes (full "done" color — the subtle
-/// completion state), the countdown reads "0:00", and the session **stays
+/// completion state): the arc geometry swaps to the full circle (0→1) via the
+/// pure `TimerDisplay.ringArc` (regression-tested — `trim(from: 1, to: 1)`
+/// would render an empty arc and the ring would vanish). The countdown reads
+/// "0:00", and the session **stays
 /// active until the user ends it** — no auto-end, no auto-modal; the End
 /// confirm remains available. **Engineer's choice (documented): at expiry the
 /// ETA line is omitted** — the estimated finish time has passed, and showing
@@ -157,9 +160,12 @@ struct TimerView: View {
                     .stroke(DesignTokens.divider, lineWidth: Self.ringLineWidth)
                 // Remaining arc: from the clamped progress offset to 1 — the
                 // ring shrinks as time passes (issue #20 criterion 2). At
-                // expiry it completes into the subtle "done" color.
+                // expiry the geometry swaps to the FULL circle (0→1) so the
+                // ring completes into the subtle "done" color; the range is
+                // the pure, regression-tested `TimerDisplay.ringArc` (a naive
+                // trim(from: 1, to: 1) would render an empty, vanished arc).
                 Circle()
-                    .trim(from: state.ringTrim, to: 1)
+                    .trim(from: state.ringArc.from, to: state.ringArc.to)
                     .stroke(
                         state.isExpired
                             ? DesignTokens.statusColor(.done)
@@ -170,7 +176,7 @@ struct TimerView: View {
                     // Paused is visible subtly (engineer's choice, calm per
                     // §21): the arc dims; the countdown dims with it below.
                     .opacity(state.isPaused ? 0.45 : 1)
-                    .animation(.linear(duration: 1), value: state.ringTrim)
+                    .animation(.linear(duration: 1), value: state.ringArc)
                     .animation(.easeInOut(duration: 0.35), value: state.isPaused)
                 Text(state.countdownText)
                     .font(.system(

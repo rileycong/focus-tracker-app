@@ -4,7 +4,8 @@ import XCTest
 /// Tests for the #20 pure display helpers (`TimerDisplay`,
 /// `TimerDisplayState`) — no SwiftUI, no I/O, no real clock: the countdown
 /// formatting boundaries, ETA formatting, session-number computation, trim
-/// clamping, and the display-state derivation driven through the engine's
+/// clamping, the ring arc geometry (fresh / mid-range / expired FULL circle),
+/// and the display-state derivation driven through the engine's
 /// pure functions with an injected fake clock (issue #20 criterion 8).
 final class TimerDisplayTests: XCTestCase {
 
@@ -94,6 +95,33 @@ final class TimerDisplayTests: XCTestCase {
         XCTAssertEqual(TimerDisplay.ringTrim(progressFraction: 1.5), 1, accuracy: 1e-12)
     }
 
+    // MARK: - Ring arc geometry (the exact trim range the view renders)
+
+    /// At a fresh start the whole time remains: the arc is the full circle.
+    func testRingArcAtFreshProgressIsFullCircle() {
+        XCTAssertEqual(TimerDisplay.ringArc(progressFraction: 0), RingArc(from: 0, to: 1))
+    }
+
+    /// Mid-range the arc keeps the shrink semantics: it runs from the
+    /// clamped progress offset to 1.
+    func testRingArcMidRangeKeepsShrinkSemantics() {
+        XCTAssertEqual(TimerDisplay.ringArc(progressFraction: 0.4), RingArc(from: 0.4, to: 1))
+    }
+
+    /// Regression (issue #20 QA FAIL): at expiry the ring must COMPLETE —
+    /// the full circle (0→1) in the done color, never `trim(from: 1, to: 1)`
+    /// which is a zero-length empty arc and lets the ring vanish.
+    func testRingArcAtExpiryIsFullCircle() {
+        XCTAssertEqual(TimerDisplay.ringArc(progressFraction: 1), RingArc(from: 0, to: 1))
+    }
+
+    /// Out-of-range progress clamps: below 0 behaves as fresh, at/above 1
+    /// behaves as expired — both render the full circle.
+    func testRingArcClampsOutOfRangeProgress() {
+        XCTAssertEqual(TimerDisplay.ringArc(progressFraction: -0.5), RingArc(from: 0, to: 1))
+        XCTAssertEqual(TimerDisplay.ringArc(progressFraction: 1.5), RingArc(from: 0, to: 1))
+    }
+
     // MARK: - Display-state derivation through the engine's pure functions
     // (issue #20 criterion 8: coordinator/engine snapshot → display state)
 
@@ -120,7 +148,7 @@ final class TimerDisplayTests: XCTestCase {
             isPaused: paused)
     }
 
-    func testDerivationAtStartShowsFullCountdownAndEmptyRing() throws {
+    func testDerivationAtStartShowsFullCountdownAndFullRemainingRing() throws {
         let clock = FakeClock()
         var engine = FocusSessionEngine(clock: clock)
         try engine.start(taskID: UUID(), duration: 25 * 60)
@@ -129,7 +157,7 @@ final class TimerDisplayTests: XCTestCase {
 
         XCTAssertEqual(state.remainingSeconds, 1500)
         XCTAssertEqual(state.countdownText, "25:00")
-        XCTAssertEqual(state.ringTrim, 0, accuracy: 1e-12)
+        XCTAssertEqual(state.ringArc, RingArc(from: 0, to: 1))
         XCTAssertFalse(state.isExpired)
         XCTAssertFalse(state.isPaused)
     }
@@ -144,7 +172,7 @@ final class TimerDisplayTests: XCTestCase {
 
         XCTAssertEqual(state.remainingSeconds, 1440)
         XCTAssertEqual(state.countdownText, "24:00")
-        XCTAssertEqual(state.ringTrim, 60.0 / 1500.0, accuracy: 1e-12)
+        XCTAssertEqual(state.ringArc, RingArc(from: 60.0 / 1500.0, to: 1))
         XCTAssertFalse(state.isExpired)
     }
 
@@ -162,7 +190,9 @@ final class TimerDisplayTests: XCTestCase {
 
         XCTAssertEqual(state.remainingSeconds, 1440, "paused time does not tick the countdown")
         XCTAssertEqual(state.countdownText, "24:00")
-        XCTAssertEqual(state.ringTrim, 60.0 / 1500.0, accuracy: 1e-12, "paused time does not shrink the ring")
+        XCTAssertEqual(
+            state.ringArc, RingArc(from: 60.0 / 1500.0, to: 1),
+            "paused time does not shrink the ring")
         XCTAssertTrue(state.isPaused)
         XCTAssertFalse(state.isExpired)
     }
@@ -177,7 +207,10 @@ final class TimerDisplayTests: XCTestCase {
 
         XCTAssertEqual(state.remainingSeconds, 0, "engine clamps remaining at 0 (no auto-end)")
         XCTAssertEqual(state.countdownText, "0:00")
-        XCTAssertEqual(state.ringTrim, 1, accuracy: 1e-12)
+        XCTAssertEqual(
+            state.ringArc, RingArc(from: 0, to: 1),
+            "at expiry the ring is the FULL circle (0→1) in the done color — "
+                + "not an empty trim(from: 1, to: 1) arc (QA regression, issue #20)")
         XCTAssertTrue(state.isExpired)
     }
 
@@ -190,7 +223,7 @@ final class TimerDisplayTests: XCTestCase {
 
         XCTAssertEqual(state.remainingSeconds, 0)
         XCTAssertEqual(state.countdownText, "0:00")
-        XCTAssertEqual(state.ringTrim, 0, accuracy: 1e-12)
+        XCTAssertEqual(state.ringArc, RingArc(from: 0, to: 1))
         XCTAssertTrue(state.isExpired)
         XCTAssertFalse(state.isPaused)
     }
