@@ -1,0 +1,50 @@
+name: FocusTracker
+options:
+  bundleIdPrefix: com.chauanhcong
+  deploymentTarget:
+    macOS: "14.0"
+  createIntermediateGroups: true
+packages:
+  Yams:
+    url: https://github.com/jpsim/Yams
+    from: 5.3.1
+settings:
+  base:
+    SWIFT_VERSION: "6.0"
+    CODE_SIGN_STYLE: Manual
+    CODE_SIGN_IDENTITY: "-"
+targets:
+  FocusTracker:
+    type: application
+    platform: macOS
+    sources:
+      - Sources/FocusTracker
+    dependencies:
+      - package: Yams
+    info:
+      path: Sources/FocusTracker/Info.plist
+      properties:
+        CFBundleDisplayName: Focus Tracker
+        LSMinimumSystemVersion: "14.0"
+        NSPrincipalClass: NSApplication
+        LSApplicationCategoryType: public.app-category.productivity
+  FocusTrackerTests:
+    type: bundle.unit-test
+    platform: macOS
+    sources:
+      - Tests/FocusTrackerTests
+    settings:
+      base:
+        GENERATE_INFOPLIST_FILE: YES
+    dependencies:
+      - target: FocusTracker
+      - package: Yams
+schemes:
+  FocusTracker:
+    build:
+      targets:
+        FocusTracker: all
+        FocusTrackerTests: [test]
+    test:
+      targets:
+        - FocusTrackerTests

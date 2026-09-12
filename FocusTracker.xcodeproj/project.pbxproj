@@ -1,0 +1,459 @@
+// !$*UTF8*$!
+{
+	archiveVersion = 1;
+	classes = {
+	};
+	objectVersion = 77;
+	objects = {
+
+/* Begin PBXBuildFile section */
+		08D3ABF571F1DD6DB2811E0F /* Yams in Frameworks */ = {isa = PBXBuildFile; productRef = 39E84D3D517CF65CE8CDEA40 /* Yams */; };
+		47F742470901C6A5A3941939 /* FocusTrackerApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 248E5131297EB06C2E76BC68 /* FocusTrackerApp.swift */; };
+		5C40816107FF2F8EF9A813F3 /* SmokeTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2FD6B094AE292E2B2CFE2055 /* SmokeTests.swift */; };
+		76EBDB2AF06605C94550A452 /* Yams in Frameworks */ = {isa = PBXBuildFile; productRef = 235DC63B1D6E684D896B5CF6 /* Yams */; };
+/* End PBXBuildFile section */
+
+/* Begin PBXContainerItemProxy section */
+		61A7E90CE03A128C1479B7E1 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 144DB8CA7062C740491CE975 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 8420D9A92F206BF9B2F6B86C;
+			remoteInfo = FocusTracker;
+		};
+/* End PBXContainerItemProxy section */
+
+/* Begin PBXFileReference section */
+		19168751BF453E16196AF15C /* FocusTrackerTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = FocusTrackerTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		1E40706EE3BCB1DD382F1F49 /* FocusTracker.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = FocusTracker.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		248E5131297EB06C2E76BC68 /* FocusTrackerApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FocusTrackerApp.swift; sourceTree = "<group>"; };
+		2FD6B094AE292E2B2CFE2055 /* SmokeTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SmokeTests.swift; sourceTree = "<group>"; };
+		BCE466B78BD1A66F6A5A44BD /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
+/* End PBXFileReference section */
+
+/* Begin PBXFrameworksBuildPhase section */
+		24C536F0EB3C8481E4BA3F4C /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				08D3ABF571F1DD6DB2811E0F /* Yams in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		653C2C2DC7B0BAF2A002B2E9 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				76EBDB2AF06605C94550A452 /* Yams in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXFrameworksBuildPhase section */
+
+/* Begin PBXGroup section */
+		1302E41D5B144D8256CB8F7C /* Sources */ = {
+			isa = PBXGroup;
+			children = (
+				576971CDFEB77959806DCDA8 /* FocusTracker */,
+			);
+			path = Sources;
+			sourceTree = "<group>";
+		};
+		1B24816C4B6AD3EA0343C217 /* Tests */ = {
+			isa = PBXGroup;
+			children = (
+				980B1C79354BC3B348B7281D /* FocusTrackerTests */,
+			);
+			path = Tests;
+			sourceTree = "<group>";
+		};
+		576971CDFEB77959806DCDA8 /* FocusTracker */ = {
+			isa = PBXGroup;
+			children = (
+				248E5131297EB06C2E76BC68 /* FocusTrackerApp.swift */,
+				BCE466B78BD1A66F6A5A44BD /* Info.plist */,
+			);
+			path = FocusTracker;
+			sourceTree = "<group>";
+		};
+		980B1C79354BC3B348B7281D /* FocusTrackerTests */ = {
+			isa = PBXGroup;
+			children = (
+				2FD6B094AE292E2B2CFE2055 /* SmokeTests.swift */,
+			);
+			path = FocusTrackerTests;
+			sourceTree = "<group>";
+		};
+		B2CAF53B2AE8E944806BFCA8 = {
+			isa = PBXGroup;
+			children = (
+				1302E41D5B144D8256CB8F7C /* Sources */,
+				1B24816C4B6AD3EA0343C217 /* Tests */,
+				F14178F47C2F3A7D3DF322FB /* Products */,
+			);
+			sourceTree = "<group>";
+		};
+		F14178F47C2F3A7D3DF322FB /* Products */ = {
+			isa = PBXGroup;
+			children = (
+				1E40706EE3BCB1DD382F1F49 /* FocusTracker.app */,
+				19168751BF453E16196AF15C /* FocusTrackerTests.xctest */,
+			);
+			name = Products;
+			sourceTree = "<group>";
+		};
+/* End PBXGroup section */
+
+/* Begin PBXNativeTarget section */
+		8420D9A92F206BF9B2F6B86C /* FocusTracker */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = A7D4699F7251ABC6697FBEE3 /* Build configuration list for PBXNativeTarget "FocusTracker" */;
+			buildPhases = (
+				1E0E17E2D6CD2B1127A43B64 /* Sources */,
+				24C536F0EB3C8481E4BA3F4C /* Frameworks */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = FocusTracker;
+			packageProductDependencies = (
+				39E84D3D517CF65CE8CDEA40 /* Yams */,
+			);
+			productName = FocusTracker;
+			productReference = 1E40706EE3BCB1DD382F1F49 /* FocusTracker.app */;
+			productType = "com.apple.product-type.application";
+		};
+		D32335A3F4D9E39F7165217C /* FocusTrackerTests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = BBECBCB86BB1F85B27AFBFAA /* Build configuration list for PBXNativeTarget "FocusTrackerTests" */;
+			buildPhases = (
+				14199D1DC0B5F5856C5705F7 /* Sources */,
+				653C2C2DC7B0BAF2A002B2E9 /* Frameworks */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				AC802ECE77F5F1214613635C /* PBXTargetDependency */,
+			);
+			name = FocusTrackerTests;
+			packageProductDependencies = (
+				235DC63B1D6E684D896B5CF6 /* Yams */,
+			);
+			productName = FocusTrackerTests;
+			productReference = 19168751BF453E16196AF15C /* FocusTrackerTests.xctest */;
+			productType = "com.apple.product-type.bundle.unit-test";
+		};
+/* End PBXNativeTarget section */
+
+/* Begin PBXProject section */
+		144DB8CA7062C740491CE975 /* Project object */ = {
+			isa = PBXProject;
+			attributes = {
+				BuildIndependentTargetsInParallel = YES;
+				LastUpgradeCheck = 1430;
+				TargetAttributes = {
+					8420D9A92F206BF9B2F6B86C = {
+						ProvisioningStyle = Manual;
+					};
+					D32335A3F4D9E39F7165217C = {
+						ProvisioningStyle = Manual;
+					};
+				};
+			};
+			buildConfigurationList = 9EE8787C5F7D7381E2A064C4 /* Build configuration list for PBXProject "FocusTracker" */;
+			developmentRegion = en;
+			hasScannedForEncodings = 0;
+			knownRegions = (
+				Base,
+				en,
+			);
+			mainGroup = B2CAF53B2AE8E944806BFCA8;
+			minimizedProjectReferenceProxies = 1;
+			packageReferences = (
+				8EE315B6781A8C65E53BC533 /* XCRemoteSwiftPackageReference "Yams" */,
+			);
+			preferredProjectObjectVersion = 77;
+			productRefGroup = F14178F47C2F3A7D3DF322FB /* Products */;
+			projectDirPath = "";
+			projectRoot = "";
+			targets = (
+				8420D9A92F206BF9B2F6B86C /* FocusTracker */,
+				D32335A3F4D9E39F7165217C /* FocusTrackerTests */,
+			);
+		};
+/* End PBXProject section */
+
+/* Begin PBXSourcesBuildPhase section */
+		14199D1DC0B5F5856C5705F7 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				5C40816107FF2F8EF9A813F3 /* SmokeTests.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		1E0E17E2D6CD2B1127A43B64 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				47F742470901C6A5A3941939 /* FocusTrackerApp.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXSourcesBuildPhase section */
+
+/* Begin PBXTargetDependency section */
+		AC802ECE77F5F1214613635C /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = 8420D9A92F206BF9B2F6B86C /* FocusTracker */;
+			targetProxy = 61A7E90CE03A128C1479B7E1 /* PBXContainerItemProxy */;
+		};
+/* End PBXTargetDependency section */
+
+/* Begin XCBuildConfiguration section */
+		060CB47713E8B29B936D340C /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++14";
+				CLANG_CXX_LIBRARY = "libc++";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				CODE_SIGN_IDENTITY = "-";
+				CODE_SIGN_STYLE = Manual;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
+				ENABLE_NS_ASSERTIONS = NO;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu11;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				MACOSX_DEPLOYMENT_TARGET = 14.0;
+				MTL_ENABLE_DEBUG_INFO = NO;
+				MTL_FAST_MATH = YES;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = macosx;
+				SWIFT_COMPILATION_MODE = wholemodule;
+				SWIFT_OPTIMIZATION_LEVEL = "-O";
+				SWIFT_VERSION = 6.0;
+			};
+			name = Release;
+		};
+		43555432A1298497969E81D9 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				COMBINE_HIDPI_IMAGES = YES;
+				INFOPLIST_FILE = Sources/FocusTracker/Info.plist;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = com.chauanhcong.FocusTracker;
+				SDKROOT = macosx;
+			};
+			name = Debug;
+		};
+		4C27008C0C16DB12B160C4A6 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				COMBINE_HIDPI_IMAGES = YES;
+				GENERATE_INFOPLIST_FILE = YES;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+					"@loader_path/../Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = com.chauanhcong.FocusTrackerTests;
+				SDKROOT = macosx;
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/FocusTracker.app/Contents/MacOS/FocusTracker";
+			};
+			name = Release;
+		};
+		63460D0D5ED6870C75C18107 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++14";
+				CLANG_CXX_LIBRARY = "libc++";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				CODE_SIGN_IDENTITY = "-";
+				CODE_SIGN_STYLE = Manual;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = dwarf;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				ENABLE_TESTABILITY = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu11;
+				GCC_DYNAMIC_NO_PIC = NO;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_OPTIMIZATION_LEVEL = 0;
+				GCC_PREPROCESSOR_DEFINITIONS = (
+					"$(inherited)",
+					"DEBUG=1",
+				);
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				MACOSX_DEPLOYMENT_TARGET = 14.0;
+				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
+				MTL_FAST_MATH = YES;
+				ONLY_ACTIVE_ARCH = YES;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = macosx;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = DEBUG;
+				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
+				SWIFT_VERSION = 6.0;
+			};
+			name = Debug;
+		};
+		6D8028AED0A31DC6C579217C /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				COMBINE_HIDPI_IMAGES = YES;
+				INFOPLIST_FILE = Sources/FocusTracker/Info.plist;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = com.chauanhcong.FocusTracker;
+				SDKROOT = macosx;
+			};
+			name = Release;
+		};
+		E33875FB782B4FA4E664C91A /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				COMBINE_HIDPI_IMAGES = YES;
+				GENERATE_INFOPLIST_FILE = YES;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+					"@loader_path/../Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = com.chauanhcong.FocusTrackerTests;
+				SDKROOT = macosx;
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/FocusTracker.app/Contents/MacOS/FocusTracker";
+			};
+			name = Debug;
+		};
+/* End XCBuildConfiguration section */
+
+/* Begin XCConfigurationList section */
+		9EE8787C5F7D7381E2A064C4 /* Build configuration list for PBXProject "FocusTracker" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				63460D0D5ED6870C75C18107 /* Debug */,
+				060CB47713E8B29B936D340C /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+		A7D4699F7251ABC6697FBEE3 /* Build configuration list for PBXNativeTarget "FocusTracker" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				43555432A1298497969E81D9 /* Debug */,
+				6D8028AED0A31DC6C579217C /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+		BBECBCB86BB1F85B27AFBFAA /* Build configuration list for PBXNativeTarget "FocusTrackerTests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				E33875FB782B4FA4E664C91A /* Debug */,
+				4C27008C0C16DB12B160C4A6 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+/* End XCConfigurationList section */
+
+/* Begin XCRemoteSwiftPackageReference section */
+		8EE315B6781A8C65E53BC533 /* XCRemoteSwiftPackageReference "Yams" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/jpsim/Yams";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 5.3.1;
+			};
+		};
+/* End XCRemoteSwiftPackageReference section */
+
+/* Begin XCSwiftPackageProductDependency section */
+		235DC63B1D6E684D896B5CF6 /* Yams */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 8EE315B6781A8C65E53BC533 /* XCRemoteSwiftPackageReference "Yams" */;
+			productName = Yams;
+		};
+		39E84D3D517CF65CE8CDEA40 /* Yams */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 8EE315B6781A8C65E53BC533 /* XCRemoteSwiftPackageReference "Yams" */;
+			productName = Yams;
+		};
+/* End XCSwiftPackageProductDependency section */
+	};
+	rootObject = 144DB8CA7062C740491CE975 /* Project object */;
+}
