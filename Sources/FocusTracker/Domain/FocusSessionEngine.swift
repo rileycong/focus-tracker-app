@@ -185,6 +185,14 @@ public struct FocusSessionResult: Equatable, Sendable {
 /// `pause()` calls; `pausedDuration` sums every closed pause segment —
 /// including one still open at `end()` (ending from paused is allowed).
 /// Individual pause intervals are not reported: the UI needs aggregates only.
+///
+/// **Persistence integration (issue #13 — the only extension this issue
+/// makes):** `captureSnapshot()` / `restore(from:)` at the bottom of this
+/// file round-trip the live state through an `ActiveSessionSnapshot` for
+/// app-local persistence (#13; never the vault). Capture is a pure read +
+/// arithmetic checkpoint; restore re-anchors the open segment into the new
+/// process epoch. #12's state machine, summation, rounding and derived
+/// values are untouched.
 public struct FocusSessionEngine: Sendable {
 
     /// Pinned default session duration (PRD §9.2): 25 minutes, configurable
@@ -352,5 +360,87 @@ public struct FocusSessionEngine: Sendable {
             case running
             case paused
         }
+    }
+}
+
+// MARK: - Persistence integration (issue #13)
+
+/// The #13 snapshot round-trip. This extension is the ONLY engine change
+/// issue #13 makes: #12's lifecycle transitions, interval summation,
+/// rounding and derived values are untouched. Both operations live here
+/// because the `ActiveSession` state is private to this file — capture is
+/// deliberately a **pure read + arithmetic checkpoint** (a non-mutating
+/// `func`, so it cannot touch live state, exactly as criterion 1 pins), and
+/// restore is the exact rehydration its math defines.
+public extension FocusSessionEngine {
+
+    /// Captures the live session as an `ActiveSessionSnapshot` exactly as of
+    /// the save instant; `nil` when idle (nothing to persist).
+    ///
+    /// Pinned checkpoint math (issue #13, criterion 1): the open segment is
+    /// checkpointed into its accumulator by pure arithmetic —
+    /// `accumulated += max(0, now − segmentStart)` for the current phase —
+    /// and the anchor (`segmentStartMonotonic`) is the save-instant reading.
+    /// The live engine state is NOT mutated: its open segment stays open with
+    /// its original `segmentStart`, so ongoing summation is unaffected.
+    ///
+    /// Consequence (pinned honest loss statement): everything accumulated
+    /// after this capture and before the close/crash lives only in memory —
+    /// bounded loss ≤ 1 autosave interval (cadence contract on
+    /// `ActiveSessionCoordinator`); recovery from this save point is exact.
+    func captureSnapshot() -> ActiveSessionSnapshot? {
+        guard let active = state else { return nil }
+        let now = clock.monotonicSeconds
+        var focused = active.accumulatedFocusedSeconds
+        var paused = active.accumulatedPausedSeconds
+        switch active.phase {
+        case .running:
+            focused += max(0, now - active.segmentStart)
+        case .paused:
+            paused += max(0, now - active.segmentStart)
+        }
+        return ActiveSessionSnapshot(
+            sessionID: active.sessionID,
+            taskID: active.taskID,
+            duration: active.durationSeconds,
+            startedAt: active.startedAtWallClock,
+            accumulatedFocusedSeconds: focused,
+            accumulatedPausedSeconds: paused,
+            pauseCount: active.pauseCount,
+            isPaused: active.phase == .paused,
+            segmentStartMonotonic: now)
+    }
+
+    /// Rehydrates the engine from a snapshot so run-interval summation
+    /// continues seamlessly in the NEW process epoch (issue #13, criterion 1
+    /// + 5). Accumulators, phase, pause count and the IDs are copied
+    /// verbatim; `started_at` is carried verbatim so the eventual §13 log
+    /// stays correct.
+    ///
+    /// Pinned re-anchor math: the stored monotonic reading is meaningless
+    /// across a restart (each process's `SystemFocusSessionClock` anchors at
+    /// init), so `segmentStart = clock.monotonicSeconds` — the new epoch's
+    /// reading at the restore instant. From then on #12's summation is
+    /// untouched and uninterrupted:
+    /// `focusedSeconds(at:) = accumulated_focused_seconds +
+    /// max(0, now − segmentStart)` while running — identical to the original
+    /// run. The snapshot's stored anchor is never read (diagnostic only).
+    ///
+    /// Throws `.sessionAlreadyActive` when a lifecycle is already open:
+    /// restore is a launch-time recovery on an idle engine, and silently
+    /// overwriting a live session would be data loss (PRD §18).
+    mutating func restore(from snapshot: ActiveSessionSnapshot) throws {
+        guard state == nil else { throw FocusSessionError.sessionAlreadyActive }
+        var active = ActiveSession(
+            sessionID: snapshot.sessionID,
+            taskID: snapshot.taskID,
+            durationSeconds: snapshot.duration,
+            startedAtWallClock: snapshot.startedAt,
+            segmentStart: clock.monotonicSeconds)  // re-anchor: NEW epoch
+        active.accumulatedFocusedSeconds = snapshot.accumulatedFocusedSeconds
+        active.accumulatedPausedSeconds = snapshot.accumulatedPausedSeconds
+        active.pauseCount = snapshot.pauseCount
+        active.phase = snapshot.isPaused ? .paused : .running
+        state = active
     }
 }
