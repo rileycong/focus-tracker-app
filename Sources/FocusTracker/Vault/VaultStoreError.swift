@@ -1,8 +1,9 @@
 import Foundation
 
 /// Errors synthesized by `VaultStore` itself: inventory building while
-/// loading (issue #6, PRD §18) and the write side (issue #7, PRD §5.3, §6.5,
-/// §18). Load errors never abort a load — each is reported inside a
+/// loading (issue #6, PRD §18), the write side (issue #7, PRD §5.3, §6.5,
+/// §18) and the path-based subtask CRUD (issue #8, PRD §5.4, §7). Load errors
+/// never abort a load — each is reported inside a
 /// `VaultStore.LoadWarning` (as `underlyingError`) and the rest of the vault
 /// still loads. Write errors abort exactly the one operation that failed and
 /// surface to the caller as thrown errors; on any typed write failure the
@@ -61,6 +62,29 @@ public enum VaultStoreError: Error, Equatable, Sendable, CustomStringConvertible
     /// partial write.
     case writeFailed(AtomicFileWriterError)
 
+    // MARK: Subtask writes (issue #8)
+
+    /// A subtask operation addressed a subtask ID that does not exist anywhere
+    /// in the parent task's recursive subtask tree — at any depth, including
+    /// an unknown `toParentSubtaskID` target for `addSubtask` and an unknown
+    /// `parentSubtaskID` for `reorderSubtasks`. `parentTaskID` is the
+    /// top-level task the operation was addressed through. (The task's own ID
+    /// is not a subtask address either.)
+    case unknownSubtaskID(subtaskID: UUID, parentTaskID: UUID)
+    /// `addSubtask` was handed a subtask whose ID already exists in the parent
+    /// file — the task's own ID or any subtask ID at any depth, across
+    /// different subtask parents. Fail-loud, matching
+    /// `.duplicateTaskIDOnCreate`'s stance: silently regenerating the ID would
+    /// leave the caller holding a different ID than the one it passed
+    /// (PRD §18: no silent data acceptance). Nothing is written.
+    case duplicateSubtaskIDOnAdd(subtaskID: UUID, parentTaskID: UUID)
+    /// `reorderSubtasks` was handed a sibling order that is not an exact
+    /// permutation of the targeted sibling list's current IDs — an ID is
+    /// missing, extra, or duplicated. `currentSiblings` is the list as
+    /// currently stored (list order = file order), `proposedOrder` the
+    /// rejected order. Nothing is written.
+    case reorderNotExactPermutation(currentSiblings: [UUID], proposedOrder: [UUID])
+
     public var description: String {
         switch self {
         case .duplicateTaskID(let id, let firstFile):
@@ -83,6 +107,15 @@ public enum VaultStoreError: Error, Equatable, Sendable, CustomStringConvertible
             return "no free filename for \"\(stem)\" after the bounded collision probe"
         case .writeFailed(let underlying):
             return "atomic file operation failed: \(underlying)"
+        case .unknownSubtaskID(let subtaskID, let parentTaskID):
+            return
+                "no subtask with ID \(subtaskID.uuidString) in parent task \(parentTaskID.uuidString)"
+        case .duplicateSubtaskIDOnAdd(let subtaskID, let parentTaskID):
+            return
+                "add refused: subtask ID \(subtaskID.uuidString) already exists in parent task \(parentTaskID.uuidString)"
+        case .reorderNotExactPermutation(let currentSiblings, let proposedOrder):
+            return
+                "reorder refused: the proposed sibling order is not an exact permutation of the current list — current \(currentSiblings.map(\.uuidString)), proposed \(proposedOrder.map(\.uuidString))"
         }
     }
 }

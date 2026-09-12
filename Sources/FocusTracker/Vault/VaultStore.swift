@@ -17,6 +17,21 @@ import Foundation
 /// `warnings` continue to describe the **last load** (they are only replaced
 /// by `load()` — documented on each operation).
 ///
+/// **Subtask writes (#8):** `addSubtask(parentID:subtask:toParentSubtaskID:)`,
+/// `updateSubtask(parentID:subtaskID:modified:)`,
+/// `deleteSubtask(parentID:subtaskID:)`,
+/// `reorderSubtasks(parentID:parentSubtaskID:siblingIDsInNewOrder:)` and the
+/// `setStatus(parentID:subtaskID:to:)` convenience address subtasks as
+/// `(parent task ID, subtask ID)` paths into the parent task's recursive
+/// `SubtaskItem` tree (unbounded nesting — no depth limits). Every operation
+/// shares one path: resolve the parent from the inventory, apply a **pure**
+/// tree mutation (the `[SubtaskItem]` helpers below the actor), then rewrite
+/// the whole parent file through the same #7 `update` mechanics. Subtasks
+/// carry no project/categories of their own — they inherit from ancestors via
+/// the #3 `effectiveProject(of:)`/`effectiveCategories(of:)` helpers
+/// (consumed as-is, never written here). `lastLoadState`/`warnings` keep
+/// describing the last load, same as all writes.
+///
 /// **Write-side internal state (rebuilt at every load, maintained by every
 /// write):**
 /// - `fileNameByTaskID` — the filename↔ID mapping; the #6 filename-sorted
@@ -440,6 +455,181 @@ public actor VaultStore {
         return try update(updated)
     }
 
+    // MARK: - Subtask CRUD (issue #8, PRD §5.4, §7, §18)
+
+    /// Appends a subtask inside a parent task's tree and persists the whole
+    /// parent file (issue #8, PRD §5.4, §7).
+    ///
+    /// - `toParentSubtaskID: nil` appends to the parent task's **top-level**
+    ///   subtask list; a non-nil ID appends as the **last child** of that
+    ///   subtask, searched at any depth (unbounded nesting). Positioning
+    ///   within a list is `reorderSubtasks`' job.
+    /// - The subtask keeps the UUID its model default assigned
+    ///   (`SubtaskItem.init` defaults to a fresh `UUID()`); it is persisted in
+    ///   the parent file's frontmatter and returned to the caller through the
+    ///   updated parent task.
+    /// - **No project/categories on the subtask** (pinned): simply not part of
+    ///   the API — `SubtaskItem` has no such fields; the child inherits them
+    ///   from its ancestors via the #3 helpers.
+    /// - **ID collision fails loudly** (pinned): the new subtask's ID may not
+    ///   collide with ANY existing ID in the parent file — the task's own ID
+    ///   or any subtask ID at any depth, across different subtask parents. No
+    ///   silent regeneration (the caller would hold a different ID than the
+    ///   one it passed — PRD §18), matching `.duplicateTaskIDOnCreate`'s
+    ///   stance. IDs from *other* files are not checked: every top-level task
+    ///   is its own file with its own ID namespace.
+    ///
+    /// Shared path for every subtask operation (issue #8): resolve the parent
+    /// task from the inventory (mapping/inventory lookups only — never
+    /// re-derived from a title), apply the pure tree mutation, then write the
+    /// whole parent file via the #7 `update` mechanics:
+    /// `requireTasksDirectory()`, the `verifyUnchanged` staleness guard,
+    /// codec encode with the load-time body re-attached byte-for-byte, atomic
+    /// temp+rename via #5. On success the inventory and byte records are
+    /// updated in place so `tasks`/`taskCount`/`lookup(_:)` match disk with no
+    /// reload; `lastLoadState`/`warnings` keep describing the last load
+    /// (documented, consistent with #7). On any typed failure nothing is
+    /// written and no state changes.
+    ///
+    /// - Returns: The updated parent `TaskItem` (including the new subtask).
+    @discardableResult
+    public func addSubtask(
+        parentID: UUID,
+        subtask: SubtaskItem,
+        toParentSubtaskID: UUID? = nil
+    ) throws -> TaskItem {
+        let parent = try resolveParentTask(parentID)
+        guard parent.id != subtask.id, parent.chain(to: subtask.id) == nil else {
+            throw VaultStoreError.duplicateSubtaskIDOnAdd(
+                subtaskID: subtask.id, parentTaskID: parent.id)
+        }
+        var mutated = parent
+        if let targetID = toParentSubtaskID {
+            guard let appended = parent.subtasks.appending(
+                subtask, asLastChildOf: targetID)
+            else {
+                throw VaultStoreError.unknownSubtaskID(
+                    subtaskID: targetID, parentTaskID: parent.id)
+            }
+            mutated.subtasks = appended
+        } else {
+            mutated.subtasks.append(subtask)
+        }
+        return try update(mutated)
+    }
+
+    /// Applies `modified` to a copy of the target subtask — searched at any
+    /// depth in the parent task's tree — and persists the whole parent file
+    /// (issue #8, PRD §5.4, §7).
+    ///
+    /// **Editable surface (pinned):** title, status, priority, effort,
+    /// deadline, notes. Two parts of the target are *not* caller-editable
+    /// data, and the store enforces both on the copy before it is written:
+    /// - **The target's `id` is re-asserted after the closure** — the ID
+    ///   addresses the operation, it is not editable data. (`SubtaskItem.id`
+    ///   is a `let`, so a closure cannot change it today; the re-assertion
+    ///   keeps the contract true even if the model ever loosens.)
+    /// - **`children` edits through the closure are discarded** and the
+    ///   original subtree restored — children edits are not part of this
+    ///   operation's contract; the tree shape is mutated only by add, delete
+    ///   and reorder.
+    ///
+    /// Shared path (staleness guard, atomic write, in-place inventory/byte
+    /// record update, untouched `lastLoadState`/`warnings`) as documented on
+    /// `addSubtask`. Errors: unknown parent → `.unknownTaskID`, parent-is-
+    /// subtask → `.notTopLevelTask`, unknown subtask at any level →
+    /// `.unknownSubtaskID`, unavailable vault → `.writeFailed`, external file
+    /// change → `.vaultChangedExternally` with nothing written (recover via
+    /// `load()` then retry).
+    ///
+    /// - Returns: The updated parent `TaskItem`.
+    @discardableResult
+    public func updateSubtask(
+        parentID: UUID,
+        subtaskID: UUID,
+        modified: (inout SubtaskItem) -> Void
+    ) throws -> TaskItem {
+        let parent = try resolveParentTask(parentID)
+        guard let mutatedSubtasks = parent.subtasks.updating(id: subtaskID, modified) else {
+            throw VaultStoreError.unknownSubtaskID(
+                subtaskID: subtaskID, parentTaskID: parent.id)
+        }
+        var mutated = parent
+        mutated.subtasks = mutatedSubtasks
+        return try update(mutated)
+    }
+
+    /// Removes the subtask `subtaskID` — searched at any depth in the parent
+    /// task's tree — **together with its whole subtree**, and persists the
+    /// whole parent file (issue #8). Siblings and other branches survive;
+    /// unbounded nesting means the removed subtree may itself nest to any
+    /// depth. Shared path and typed errors as documented on `addSubtask`.
+    public func deleteSubtask(parentID: UUID, subtaskID: UUID) throws {
+        let parent = try resolveParentTask(parentID)
+        guard let mutatedSubtasks = parent.subtasks.removing(id: subtaskID) else {
+            throw VaultStoreError.unknownSubtaskID(
+                subtaskID: subtaskID, parentTaskID: parent.id)
+        }
+        var mutated = parent
+        mutated.subtasks = mutatedSubtasks
+        _ = try update(mutated)
+    }
+
+    /// Reorders exactly one sibling list inside the parent task's tree and
+    /// persists the whole parent file (issue #8, PRD §5.4, §7).
+    ///
+    /// - `parentSubtaskID: nil` reorders the parent task's **top-level**
+    ///   subtask list; a non-nil ID reorders that subtask's children (searched
+    ///   at any depth). Ordering persists via the file's list order — no order
+    ///   field is added.
+    /// - **Pure core:** the permutation is computed by the pure, unit-testable
+    ///   `[SubtaskItem]` helpers below the actor (`reordered(to:)` /
+    ///   `reorderingChildren(of:to:)`), in the spirit of #3's
+    ///   `newlyDoneIDs(markingDone:)`.
+    /// - `siblingIDsInNewOrder` must be an exact permutation of the targeted
+    ///   list's current IDs — missing, extra, or duplicated IDs throw
+    ///   `.reorderNotExactPermutation` and nothing is written.
+    ///
+    /// Shared path and typed errors as documented on `addSubtask`.
+    ///
+    /// - Returns: The updated parent `TaskItem`.
+    @discardableResult
+    public func reorderSubtasks(
+        parentID: UUID,
+        parentSubtaskID: UUID? = nil,
+        siblingIDsInNewOrder: [UUID]
+    ) throws -> TaskItem {
+        let parent = try resolveParentTask(parentID)
+        var mutated = parent
+        if let parentSubtaskID {
+            guard let reorderedChildren = try parent.subtasks.reorderingChildren(
+                of: parentSubtaskID, to: siblingIDsInNewOrder)
+            else {
+                throw VaultStoreError.unknownSubtaskID(
+                    subtaskID: parentSubtaskID, parentTaskID: parent.id)
+            }
+            mutated.subtasks = reorderedChildren
+        } else {
+            mutated.subtasks = try parent.subtasks.reordered(to: siblingIDsInNewOrder)
+        }
+        return try update(mutated)
+    }
+
+    /// Changes a subtask's status and writes it through to disk immediately —
+    /// a thin wrapper over `updateSubtask` (issue #8), symmetric with #7's
+    /// top-level `setStatus`, so it carries all the same guarantees and typed
+    /// errors (including the re-asserted `id` and the staleness guard). The
+    /// status is written exactly as given — no propagation to ancestors or
+    /// descendants (parent auto-completion bubble-up is #9).
+    ///
+    /// - Returns: The updated parent `TaskItem`.
+    @discardableResult
+    public func setStatus(
+        parentID: UUID, subtaskID: UUID, to status: TaskStatus
+    ) throws -> TaskItem {
+        try updateSubtask(parentID: parentID, subtaskID: subtaskID) { $0.status = status }
+    }
+
     // MARK: - Loading internals
 
     private func finish(_ state: LoadState) -> LoadState {
@@ -581,6 +771,21 @@ public actor VaultStore {
         return fileName
     }
 
+    /// The loaded top-level task with `parentID` — the only way subtask
+    /// operations resolve their parent (inventory lookups only, never
+    /// re-derived from a title, issue #8). An ID that is not loaded fails with
+    /// `.unknownTaskID`; an ID that belongs to a subtask inside some loaded
+    /// task's tree fails with `.notTopLevelTask`.
+    private func resolveParentTask(_ parentID: UUID) throws -> TaskItem {
+        guard let parent = tasks.first(where: { $0.id == parentID }) else {
+            if tasks.contains(where: { $0.chain(to: parentID) != nil }) {
+                throw VaultStoreError.notTopLevelTask(parentID)
+            }
+            throw VaultStoreError.unknownTaskID(parentID)
+        }
+        return parent
+    }
+
     /// Fails with the #5 typed `directoryMissing` (wrapped in `writeFailed`)
     /// when the vault or its `Tasks/` directory is missing or not a directory.
     /// Checked *before* the staleness guard so an unavailable vault surfaces
@@ -660,5 +865,143 @@ public actor VaultStore {
             }
         }
         tasks.insert(task, at: index)
+    }
+}
+
+// MARK: - Pure subtask tree mutations (issue #8, PRD §5.4/§7)
+
+/// Pure helpers over one sibling list of `SubtaskItem`s, backing the #8
+/// subtask CRUD: every helper maps the current list (and its arguments) to a
+/// **new** list — the receiver is never mutated, nothing touches the store or
+/// the disk — so `VaultStore` computes the fully mutated parent task first and
+/// hands it to the #7 update mechanics for the atomic write only when the
+/// mutation is valid. In the spirit of #3's pure model helpers
+/// (`TaskItem.newlyDoneIDs(markingDone:)`); these live in `Vault/` (not
+/// `Models/`) because they encode store-side persistence semantics, and
+/// `Models/` is frozen for issue #8.
+extension Array where Element == SubtaskItem {
+    /// A copy of this sibling list with `newSubtask` appended as the **last
+    /// child** of the subtask with `parentSubtaskID`, searching nested
+    /// children at any depth (unbounded nesting — no depth limits). Returns
+    /// nil when no subtask with that ID exists in this list or any descendant
+    /// list; the first match in list order wins, same as `lookup(_:)`.
+    func appending(
+        _ newSubtask: SubtaskItem, asLastChildOf parentSubtaskID: UUID
+    ) -> [SubtaskItem]? {
+        var copy = self
+        for index in copy.indices {
+            if copy[index].id == parentSubtaskID {
+                copy[index].children.append(newSubtask)
+                return copy
+            }
+            if let deeper = copy[index].children.appending(
+                newSubtask, asLastChildOf: parentSubtaskID)
+            {
+                copy[index].children = deeper
+                return copy
+            }
+        }
+        return nil
+    }
+
+    /// A copy of this sibling list with `modify` applied to the subtask with
+    /// `targetID` (first match in list order, nested at any depth). Returns
+    /// nil when the ID does not exist. The two parts the #8 contract keeps out
+    /// of the caller's reach are enforced here, on the copy: the target's
+    /// `id` is re-asserted after the closure (the ID addresses the operation —
+    /// it is not editable data), and any `children` edits through the closure
+    /// are discarded (the original subtree is restored — tree shape is
+    /// mutated only by add/delete/reorder).
+    func updating(
+        id targetID: UUID, _ modify: (inout SubtaskItem) -> Void
+    ) -> [SubtaskItem]? {
+        var copy = self
+        for index in copy.indices {
+            guard copy[index].id == targetID else {
+                if let deeper = copy[index].children.updating(id: targetID, modify) {
+                    copy[index].children = deeper
+                    return copy
+                }
+                continue
+            }
+            var target = copy[index]
+            let assertedID = target.id
+            let originalChildren = target.children
+            modify(&target)
+            copy[index] = SubtaskItem(
+                id: assertedID,
+                title: target.title,
+                status: target.status,
+                priority: target.priority,
+                effort: target.effort,
+                deadline: target.deadline,
+                notes: target.notes,
+                children: originalChildren)
+            return copy
+        }
+        return nil
+    }
+
+    /// A copy of this sibling list with the subtask with `targetID` (first
+    /// match, any depth) — and its whole subtree — removed. Returns nil when
+    /// the ID does not exist; siblings and other branches survive untouched.
+    func removing(id targetID: UUID) -> [SubtaskItem]? {
+        var copy = self
+        if let index = copy.firstIndex(where: { $0.id == targetID }) {
+            copy.remove(at: index)
+            return copy
+        }
+        for index in copy.indices {
+            if let deeper = copy[index].children.removing(id: targetID) {
+                copy[index].children = deeper
+                return copy
+            }
+        }
+        return nil
+    }
+
+    /// This sibling list reordered to exactly `newOrder` — the pure,
+    /// unit-testable core of `VaultStore.reorderSubtasks` (issue #8). Every
+    /// current ID must appear in `newOrder` exactly once, in the desired
+    /// sequence; a missing, extra, or duplicated ID throws
+    /// `VaultStoreError.reorderNotExactPermutation` carrying both lists.
+    /// Ordering persists via the file's list order — no order field exists.
+    func reordered(to siblingIDsInNewOrder: [UUID]) throws -> [SubtaskItem] {
+        let currentSiblings = map(\.id)
+        guard siblingIDsInNewOrder.count == currentSiblings.count,
+            Set(siblingIDsInNewOrder) == Set(currentSiblings)
+        else {
+            throw VaultStoreError.reorderNotExactPermutation(
+                currentSiblings: currentSiblings,
+                proposedOrder: siblingIDsInNewOrder)
+        }
+        // First wins on duplicate keys, matching `lookup(_:)`'s first-match
+        // rule (loaded files are not deduplicated across subtask lists).
+        let byID = Dictionary(map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
+        return siblingIDsInNewOrder.compactMap { byID[$0] }
+    }
+
+    /// A copy of this sibling list in which the children of the subtask with
+    /// `parentSubtaskID` (first match, any depth) are reordered via
+    /// `reordered(to:)`. Returns nil when no subtask with that ID exists;
+    /// throws the permutation error when `newOrder` is not an exact
+    /// permutation of that subtask's current children.
+    func reorderingChildren(
+        of parentSubtaskID: UUID, to newOrder: [UUID]
+    ) throws -> [SubtaskItem]? {
+        var copy = self
+        for index in copy.indices {
+            if copy[index].id == parentSubtaskID {
+                copy[index].children = try copy[index].children.reordered(to: newOrder)
+                return copy
+            }
+            if let deeper = try copy[index].children.reorderingChildren(
+                of: parentSubtaskID, to: newOrder)
+            {
+                copy[index].children = deeper
+                return copy
+            }
+        }
+        return nil
     }
 }
