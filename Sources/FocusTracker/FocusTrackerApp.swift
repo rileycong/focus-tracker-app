@@ -19,8 +19,13 @@ struct FocusTrackerApp: App {
 
     var body: some Scene {
         WindowGroup {
-            Text("Focus Tracker")
+            // The app's default view (issue #15, PRD §8.2), styled dark and
+            // calm per PRD §21 (the root enforces `.dark`; the palette in
+            // `DesignTokens` is dark-first).
+            TasksView(model: model)
                 .task { await model.bootstrap() }
+                .preferredColorScheme(.dark)
+                .frame(minWidth: 640, minHeight: 420)
         }
     }
 }
