@@ -9,6 +9,7 @@
 /* Begin PBXBuildFile section */
 		05AC78D4781BF0F715D8B280 /* TaskCompletion.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC47B30A5701AAE8E38FA746 /* TaskCompletion.swift */; };
 		08D3ABF571F1DD6DB2811E0F /* Yams in Frameworks */ = {isa = PBXBuildFile; productRef = 39E84D3D517CF65CE8CDEA40 /* Yams */; };
+		0C0890159FFBB5CADECDDDF0 /* VaultStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = CF0567BC0B0379E14C94219B /* VaultStore.swift */; };
 		13CF5781F461AD63F5372CA9 /* FrontmatterCodecTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4D5486D7E5950BEA4B04343F /* FrontmatterCodecTests.swift */; };
 		2C75A6F305AE89450722FF81 /* DeadlineDay.swift in Sources */ = {isa = PBXBuildFile; fileRef = DAA99F75D6C0662182DA03AB /* DeadlineDay.swift */; };
 		335FFAE1E20D5816ACF0D335 /* FrontmatterSplitter.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9E370EA1340964AFF7C24132 /* FrontmatterSplitter.swift */; };
@@ -26,6 +27,8 @@
 		B9E22BF26DE00534CA7CE529 /* AtomicFileWriter.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000862FD87ECFD14A2EBBD89 /* AtomicFileWriter.swift */; };
 		BD328D7DD66DBB049E79C6ED /* FrontmatterDecoder.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1CAECA9BDEFA889C6DE2EBE9 /* FrontmatterDecoder.swift */; };
 		C71E057857B6BCB5BF0CA4DA /* AtomicFileWriterError.swift in Sources */ = {isa = PBXBuildFile; fileRef = E0BA7BF8D84B73D94EF3157C /* AtomicFileWriterError.swift */; };
+		CD6092F00DDF72B36F057846 /* VaultStoreError.swift in Sources */ = {isa = PBXBuildFile; fileRef = F2263127664569F0F7194904 /* VaultStoreError.swift */; };
+		DF5EA0555990FD6FC645C434 /* VaultStoreTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 28BA6F82E572C982197E1959 /* VaultStoreTests.swift */; };
 		FB83696C4D6A3A0A58D84EB1 /* Project.swift in Sources */ = {isa = PBXBuildFile; fileRef = E0CE5BEA0D95F2D356A98AB3 /* Project.swift */; };
 /* End PBXBuildFile section */
 
@@ -45,6 +48,7 @@
 		1CAECA9BDEFA889C6DE2EBE9 /* FrontmatterDecoder.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FrontmatterDecoder.swift; sourceTree = "<group>"; };
 		1E40706EE3BCB1DD382F1F49 /* FocusTracker.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = FocusTracker.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		248E5131297EB06C2E76BC68 /* FocusTrackerApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FocusTrackerApp.swift; sourceTree = "<group>"; };
+		28BA6F82E572C982197E1959 /* VaultStoreTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VaultStoreTests.swift; sourceTree = "<group>"; };
 		2C3DCD0FA4C4F11707ADCC34 /* SubtaskItem.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SubtaskItem.swift; sourceTree = "<group>"; };
 		2FD6B094AE292E2B2CFE2055 /* SmokeTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SmokeTests.swift; sourceTree = "<group>"; };
 		496B467448E0EBB4F9699080 /* FrontmatterEncoder.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FrontmatterEncoder.swift; sourceTree = "<group>"; };
@@ -55,10 +59,12 @@
 		BCE466B78BD1A66F6A5A44BD /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
 		BDF05E8048A2CA4C67790C50 /* Category.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Category.swift; sourceTree = "<group>"; };
 		C76EB463C7C44B3BA54CD43C /* TaskItem.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TaskItem.swift; sourceTree = "<group>"; };
+		CF0567BC0B0379E14C94219B /* VaultStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VaultStore.swift; sourceTree = "<group>"; };
 		DAA99F75D6C0662182DA03AB /* DeadlineDay.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DeadlineDay.swift; sourceTree = "<group>"; };
 		DDB02A5B746D6AFFE94F389F /* AtomicFileWriterTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AtomicFileWriterTests.swift; sourceTree = "<group>"; };
 		E0BA7BF8D84B73D94EF3157C /* AtomicFileWriterError.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AtomicFileWriterError.swift; sourceTree = "<group>"; };
 		E0CE5BEA0D95F2D356A98AB3 /* Project.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Project.swift; sourceTree = "<group>"; };
+		F2263127664569F0F7194904 /* VaultStoreError.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VaultStoreError.swift; sourceTree = "<group>"; };
 		F64F2B847F2F64F2D070FE92 /* TaskModelTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TaskModelTests.swift; sourceTree = "<group>"; };
 		F9C6D88FF4AC946BB7DB89A5 /* FrontmatterError.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FrontmatterError.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
@@ -133,6 +139,8 @@
 				496B467448E0EBB4F9699080 /* FrontmatterEncoder.swift */,
 				F9C6D88FF4AC946BB7DB89A5 /* FrontmatterError.swift */,
 				9E370EA1340964AFF7C24132 /* FrontmatterSplitter.swift */,
+				CF0567BC0B0379E14C94219B /* VaultStore.swift */,
+				F2263127664569F0F7194904 /* VaultStoreError.swift */,
 			);
 			path = Vault;
 			sourceTree = "<group>";
@@ -144,6 +152,7 @@
 				4D5486D7E5950BEA4B04343F /* FrontmatterCodecTests.swift */,
 				2FD6B094AE292E2B2CFE2055 /* SmokeTests.swift */,
 				F64F2B847F2F64F2D070FE92 /* TaskModelTests.swift */,
+				28BA6F82E572C982197E1959 /* VaultStoreTests.swift */,
 			);
 			path = FocusTrackerTests;
 			sourceTree = "<group>";
@@ -257,6 +266,7 @@
 				13CF5781F461AD63F5372CA9 /* FrontmatterCodecTests.swift in Sources */,
 				5C40816107FF2F8EF9A813F3 /* SmokeTests.swift in Sources */,
 				72FE907904C132B266A02074 /* TaskModelTests.swift in Sources */,
+				DF5EA0555990FD6FC645C434 /* VaultStoreTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -278,6 +288,8 @@
 				05AC78D4781BF0F715D8B280 /* TaskCompletion.swift in Sources */,
 				8DC94FF8D60CDCCA3EFE6439 /* TaskEnums.swift in Sources */,
 				72319A87076D8C1FCBEF4E8C /* TaskItem.swift in Sources */,
+				0C0890159FFBB5CADECDDDF0 /* VaultStore.swift in Sources */,
+				CD6092F00DDF72B36F057846 /* VaultStoreError.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
