@@ -428,4 +428,65 @@ final class TasksGroupingTests: XCTestCase {
             collapseStore: UserDefaultsCollapseStateStore(defaults: suite))
         XCTAssertFalse(other.isExpanded(forKey: key))
     }
+
+    // MARK: - Subtask tree helpers (issue #17)
+
+    func testDescendantCountOfLeafIsZero() {
+        let leaf = SubtaskItem(title: "Leaf")
+
+        XCTAssertEqual(TasksGrouping.descendantCount(of: leaf), 0)
+    }
+
+    func testDescendantCountSumsDirectChildrenOnly() {
+        let node = SubtaskItem(
+            title: "Node",
+            children: [
+                SubtaskItem(title: "Child 1"),
+                SubtaskItem(title: "Child 2"),
+            ])
+
+        XCTAssertEqual(TasksGrouping.descendantCount(of: node), 2)
+    }
+
+    func testDescendantCountsTheWholeNestedSubtree() {
+        // node → "Child with subtree" → "Grandchild" → "Great-grandchild"
+        // (3 in that chain) plus "Leaf child" (1) → 4 descendants total.
+        let node = SubtaskItem(
+            title: "Node",
+            children: [
+                SubtaskItem(
+                    title: "Child with subtree",
+                    children: [
+                        SubtaskItem(
+                            title: "Grandchild",
+                            children: [SubtaskItem(title: "Great-grandchild")])
+                    ]),
+                SubtaskItem(title: "Leaf child"),
+            ])
+
+        XCTAssertEqual(
+            TasksGrouping.descendantCount(of: node), 4,
+            "descendants at every depth count, not just direct children")
+    }
+
+    func testSubtaskCollapseKeysAreStableAndScopedByTask() {
+        let taskA = UUID()
+        let taskB = UUID()
+        let subtask = UUID()
+
+        XCTAssertEqual(
+            TasksGrouping.subtaskCollapseKey(taskID: taskA, subtaskID: subtask),
+            TasksGrouping.subtaskCollapseKey(taskID: taskA, subtaskID: subtask),
+            "the same node always maps to the same key (persistence across relaunches)")
+        XCTAssertNotEqual(
+            TasksGrouping.subtaskCollapseKey(taskID: taskA, subtaskID: subtask),
+            TasksGrouping.subtaskCollapseKey(taskID: taskB, subtaskID: subtask),
+            "keys are scoped by their top-level task")
+        XCTAssertNotEqual(
+            TasksGrouping.taskCollapseKey(taskA),
+            TasksGrouping.taskCollapseKey(taskB))
+        XCTAssertNotEqual(
+            TasksGrouping.taskCollapseKey(taskA),
+            TasksGrouping.subtaskCollapseKey(taskID: taskA, subtaskID: taskA))
+    }
 }

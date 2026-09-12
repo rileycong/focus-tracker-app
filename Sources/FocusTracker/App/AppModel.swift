@@ -141,11 +141,12 @@ public final class AppModel {
         case noPendingSession
     }
 
-    /// The typed failure of a task write with no vault to write through
-    /// (issue #16): `createTask`/`updateTask` fail closed when no vault path
-    /// is configured — nothing can ever write to a wrong or placeholder
-    /// location (PRD §18). Store-level failures surface as thrown
-    /// `VaultStoreError`s unchanged.
+    /// The typed failure of a task or subtask write with no vault to write
+    /// through (issues #16 + #17): `createTask`/`updateTask` and the subtask
+    /// passthroughs (`addSubtask`/`updateSubtask`/`deleteSubtask`) fail
+    /// closed when no vault path is configured — nothing can ever write to a
+    /// wrong or placeholder location (PRD §18). Store-level failures surface
+    /// as thrown `VaultStoreError`s unchanged.
     public enum TaskWriteError: Error, Equatable, Sendable {
         case noVaultConfigured
     }
@@ -381,19 +382,79 @@ public final class AppModel {
     }
 
     /// Mirrors the store's write-synced inventory into the observable state
-    /// (issue #16 engineer's choice between `reloadVault()` and mirroring):
-    /// #7 keeps the store's `tasks` in step with disk after every successful
-    /// write, so the model can refresh without an extra disk read. The state
-    /// becomes `.loaded` with the store's current tasks/warnings — a
-    /// successful write proves the vault and its `Tasks/` directory are real,
-    /// so upgrading a stale degraded display state is accurate, and
-    /// `warnings` still describe the last load (per the #7 contract, writes
-    /// never touch them).
+    /// (issues #16/#17 engineer's choice between `reloadVault()` and
+    /// mirroring): #7 keeps the store's `tasks` in step with disk after every
+    /// successful write, so the model can refresh without an extra disk
+    /// read. The state becomes `.loaded` with the store's current
+    /// tasks/warnings — a successful write proves the vault and its `Tasks/`
+    /// directory are real, so upgrading a stale degraded display state is
+    /// accurate, and `warnings` still describe the last load (per the #7
+    /// contract, writes never touch them).
     private func mirrorSyncedInventory(from store: VaultStore) async {
         let syncedTasks = await store.tasks
         let warnings = await store.warnings
         tasks = syncedTasks
         vaultState = .loaded(VaultStore.Inventory(tasks: syncedTasks, warnings: warnings))
+    }
+
+    // MARK: - Subtask write passthroughs (issue #17, PRD §5.4, §20.2)
+
+    /// Adds a subtask through `VaultStore.addSubtask(parentID:subtask:
+    /// toParentSubtaskID:)` (#8) and returns the updated parent task.
+    /// `toParentSubtaskID` nil appends to the task's top-level subtask list;
+    /// a non-nil ID appends as the last child of that subtask at any depth.
+    ///
+    /// Errors surface typed exactly as on `createTask`: `.noVaultConfigured`
+    /// when there is no store to write through, and the store's own
+    /// `VaultStoreError` (e.g. `.unknownTaskID`, `.unknownSubtaskID`,
+    /// `.duplicateSubtaskIDOnAdd`, `.writeFailed`) unchanged on any failure —
+    /// on which nothing is written and the observable state is untouched.
+    ///
+    /// On success the exposed `tasks`/`vaultState` are refreshed from the
+    /// store's already-synced inventory (`mirrorSyncedInventory(from:)` — no
+    /// reload, no second disk read).
+    @discardableResult
+    public func addSubtask(
+        parentID: UUID, subtask: SubtaskItem, toParentSubtaskID: UUID? = nil
+    ) async throws -> TaskItem {
+        guard let store = vaultStore else { throw TaskWriteError.noVaultConfigured }
+        let updated = try await store.addSubtask(
+            parentID: parentID, subtask: subtask, toParentSubtaskID: toParentSubtaskID)
+        await mirrorSyncedInventory(from: store)
+        return updated
+    }
+
+    /// Persists an edit to one subtask through `VaultStore.updateSubtask(
+    /// parentID:subtaskID:modified:)` (#8) and returns the updated parent
+    /// task. The `apply` closure runs inside the store and must edit only
+    /// title/status/priority/effort/deadline/notes (the #8 editable surface —
+    /// the store re-asserts `id` and discards `children` edits; the form
+    /// never constructs them either). It is `@Sendable` (pure value
+    /// manipulation, no isolated state access) so the store can apply it at
+    /// write time to the then-current target — the store's actor applies the
+    /// edit, never a stale main-actor copy.
+    ///
+    /// Errors and the observable-state refresh as on `addSubtask`.
+    @discardableResult
+    public func updateSubtask(
+        parentID: UUID, subtaskID: UUID, apply: @Sendable (inout SubtaskItem) -> Void
+    ) async throws -> TaskItem {
+        guard let store = vaultStore else { throw TaskWriteError.noVaultConfigured }
+        let updated = try await store.updateSubtask(
+            parentID: parentID, subtaskID: subtaskID, modified: apply)
+        await mirrorSyncedInventory(from: store)
+        return updated
+    }
+
+    /// Removes a subtask — with its whole subtree (#8 semantics) — through
+    /// `VaultStore.deleteSubtask(parentID:subtaskID:)`. Siblings and other
+    /// branches survive.
+    ///
+    /// Errors and the observable-state refresh as on `addSubtask`.
+    public func deleteSubtask(parentID: UUID, subtaskID: UUID) async throws {
+        guard let store = vaultStore else { throw TaskWriteError.noVaultConfigured }
+        try await store.deleteSubtask(parentID: parentID, subtaskID: subtaskID)
+        await mirrorSyncedInventory(from: store)
     }
 
     // MARK: - Active session passthroughs (thin; real flows are #19/#22)

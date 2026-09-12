@@ -109,7 +109,7 @@ struct TaskFormView: View {
         _state = State(initialValue: initialState)
         _hasDeadline = State(initialValue: initialState.deadline != nil)
         _deadlinePick = State(
-            initialValue: initialState.deadline ?? Self.canonicalDeadline(from: .now))
+            initialValue: initialState.deadline ?? FormDeadline.canonical(from: .now))
         _projectChoice = State(
             initialValue: initialState.projectName.map(ProjectChoice.existing) ?? .none)
     }
@@ -360,7 +360,7 @@ struct TaskFormView: View {
                 .onChange(of: hasDeadline) { _, isOn in
                     if isOn {
                         if state.deadline == nil {
-                            let day = Self.canonicalDeadline(from: .now)
+                            let day = FormDeadline.canonical(from: .now)
                             deadlinePick = day
                             state.deadline = day
                         }
@@ -374,7 +374,7 @@ struct TaskFormView: View {
                 .labelsHidden()
                 .disabled(!hasDeadline)
                 .onChange(of: deadlinePick) { _, picked in
-                    state.deadline = Self.canonicalDeadline(from: picked)
+                    state.deadline = FormDeadline.canonical(from: picked)
                 }
         }
     }
@@ -454,18 +454,5 @@ struct TaskFormView: View {
                 .foregroundStyle(DesignTokens.overdue)
         }
         .font(.caption)
-    }
-
-    /// The picked local calendar day in the #4 canonical deadline shape
-    /// (noon UTC on that day), so the persisted `yyyy-MM-dd` is exactly the
-    /// day the user picked for any |UTC offset| ≤ 12 h — the same WYSIWYG
-    /// convention `DeadlineDay` uses for parsing.
-    private static func canonicalDeadline(from picked: Date) -> Date {
-        var local = Calendar(identifier: .gregorian)
-        local.timeZone = .current
-        let day = local.dateComponents([.year, .month, .day], from: picked)
-        var utc = Calendar(identifier: .gregorian)
-        utc.timeZone = TimeZone(identifier: "UTC") ?? .current
-        return (utc.date(from: day) ?? picked).addingTimeInterval(12 * 60 * 60)
     }
 }

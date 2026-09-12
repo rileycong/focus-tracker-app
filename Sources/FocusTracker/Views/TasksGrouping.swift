@@ -87,6 +87,31 @@ public enum TasksGrouping {
         deadline < now
     }
 
+    // MARK: - Subtask tree helpers (issue #17, PRD §5.4/§20.2)
+
+    /// The total number of descendants of `subtask` — children, grandchildren,
+    /// … at any depth (unbounded nesting). The pure core of the #17 delete
+    /// confirmation: when N > 0 the dialog says "… and its N subtasks". The
+    /// subtask itself is not counted.
+    public static func descendantCount(of subtask: SubtaskItem) -> Int {
+        subtask.children.reduce(subtask.children.count) {
+            $0 + descendantCount(of: $1)
+        }
+    }
+
+    /// The persistent collapse key for a task row's subtask-tree disclosure
+    /// (issue #17). ID-based — stable across relaunches and title edits.
+    public static func taskCollapseKey(_ taskID: UUID) -> String {
+        "task:\(taskID.uuidString)"
+    }
+
+    /// The persistent collapse key for one subtask node's disclosure, scoped
+    /// by its top-level task so the same subtask ID in different files (or a
+    /// coincidental UUID reuse) never shares collapse state.
+    public static func subtaskCollapseKey(taskID: UUID, subtaskID: UUID) -> String {
+        "\(taskCollapseKey(taskID))|subtask:\(subtaskID.uuidString)"
+    }
+
     // MARK: - Collapse keys (stable across relaunches)
 
     /// The persistent collapse key for a project section. `nil` project (No

@@ -12,6 +12,14 @@ struct TasksView: View {
     /// The #16 form presentation: nil = closed; non-nil shows the sheet
     /// (create, or edit of a specific task).
     @State private var formRequest: TaskFormRequest?
+    /// The #17 subtask form presentation: nil = closed; non-nil shows the
+    /// sheet (a create under a given parent, or the edit of a subtask).
+    @State private var subtaskFormRequest: SubtaskFormRequest?
+    /// The #17 delete path's error surface: the subtask confirmation dialog
+    /// has no form to surface a store error inline, so a failed delete is
+    /// reported here (the inventory is untouched on failure — nothing is
+    /// silently lost, PRD §18).
+    @State private var deleteErrorMessage: String?
 
     /// - Parameter model: The #14 composition root. The view model starts
     ///   from `model.tasks` (empty before the first load) and is kept in step
@@ -62,6 +70,40 @@ struct TasksView: View {
                         try await model.updateTask(task)
                     }
                 })
+        }
+        .sheet(item: $subtaskFormRequest) { request in
+            SubtaskFormView(request: request) { subtask in
+                switch request.mode {
+                case .create(let parentTaskID, let toParentSubtaskID):
+                    try await model.addSubtask(
+                        parentID: parentTaskID, subtask: subtask,
+                        toParentSubtaskID: toParentSubtaskID)
+                case .edit(let parentTaskID, let original):
+                    // The #8 editable surface only — the store re-asserts
+                    // `id` and discards `children` edits; the form's built
+                    // subtask carries the original's id/children anyway.
+                    try await model.updateSubtask(
+                        parentID: parentTaskID, subtaskID: original.id
+                    ) { target in
+                        target.title = subtask.title
+                        target.status = subtask.status
+                        target.priority = subtask.priority
+                        target.effort = subtask.effort
+                        target.deadline = subtask.deadline
+                        target.notes = subtask.notes
+                    }
+                }
+            }
+        }
+        .alert(
+            "Could not delete subtask",
+            isPresented: Binding(
+                get: { deleteErrorMessage != nil },
+                set: { if !$0 { deleteErrorMessage = nil } })
+        ) {
+            Button("OK", role: .cancel) {}
+        } message: {
+            Text(deleteErrorMessage ?? "")
         }
     }
 
@@ -164,10 +206,16 @@ struct TasksView: View {
     private func statusGroupView(_ group: TaskStatusGroup) -> some View {
         DisclosureGroup(isExpanded: viewModel.expandedBinding(forKey: group.collapseKey)) {
             ForEach(group.tasks) { task in
-                TaskRowView(task: task, viewModel: viewModel)
+                TaskRowView(task: task, viewModel: viewModel, subtaskActions: subtaskActions)
                     .contextMenu {
                         Button("New Task…") {
                             formRequest = TaskFormRequest(mode: .create)
+                        }
+                        Button("Add Subtask…") {
+                            // Task-level add: the subtask lands in the
+                            // task's top-level subtask list (#8: nil).
+                            subtaskFormRequest = SubtaskFormRequest(
+                                mode: .create(parentTaskID: task.id, toParentSubtaskID: nil))
                         }
                         Button("Edit Task…") {
                             formRequest = TaskFormRequest(mode: .edit(task))
@@ -244,6 +292,33 @@ struct TasksView: View {
             .background(DesignTokens.bannerBackground)
             Spacer()
         }
+    }
+
+    // MARK: - Subtask form entries (issue #17)
+
+    /// The add/edit/delete entry points the task and subtask rows' context
+    /// menus expose, wired to the `AppModel` passthroughs. `add` maps a
+    /// nil `parentSubtaskID` to a task-level add and any subtask's ID to a
+    /// nested add under it (#8); `delete` surfaces a store failure through
+    /// the delete alert (the dialog itself closes either way).
+    private var subtaskActions: SubtaskActions {
+        SubtaskActions(
+            add: { taskID, parentSubtaskID in
+                subtaskFormRequest = SubtaskFormRequest(
+                    mode: .create(
+                        parentTaskID: taskID, toParentSubtaskID: parentSubtaskID))
+            },
+            edit: { taskID, subtask in
+                subtaskFormRequest = SubtaskFormRequest(
+                    mode: .edit(parentTaskID: taskID, subtask: subtask))
+            },
+            delete: { taskID, subtask in
+                do {
+                    try await model.deleteSubtask(parentID: taskID, subtaskID: subtask.id)
+                } catch {
+                    deleteErrorMessage = error.localizedDescription
+                }
+            })
     }
 
     // MARK: - Task form entries (issue #16)
