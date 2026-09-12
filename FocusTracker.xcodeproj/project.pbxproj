@@ -25,6 +25,7 @@
 		5C40816107FF2F8EF9A813F3 /* SmokeTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2FD6B094AE292E2B2CFE2055 /* SmokeTests.swift */; };
 		60C1AF42B5D52D3E66DD88D3 /* DailyLogStoreTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B67859164CAD39CDD96B1736 /* DailyLogStoreTests.swift */; };
 		637271F24F8DCCFC153B40B0 /* StatusTransition.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5F0BA521BD58A62A830A1C10 /* StatusTransition.swift */; };
+		64A3DACB834DD689B2881F95 /* FocusSessionEngineTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = ED156E35E718B893DF3B1E29 /* FocusSessionEngineTests.swift */; };
 		6D529C027DDC08698272BBCA /* VaultStoreStatusTransitions.swift in Sources */ = {isa = PBXBuildFile; fileRef = 84025FD8E3B25790B7D988C9 /* VaultStoreStatusTransitions.swift */; };
 		71C6973B688B2079F118533E /* SubtaskItem.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2C3DCD0FA4C4F11707ADCC34 /* SubtaskItem.swift */; };
 		72319A87076D8C1FCBEF4E8C /* TaskItem.swift in Sources */ = {isa = PBXBuildFile; fileRef = C76EB463C7C44B3BA54CD43C /* TaskItem.swift */; };
@@ -37,6 +38,7 @@
 		9469583BB0418CD9B069045C /* DailyLogStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0E0903987EB31A0547484E3 /* DailyLogStore.swift */; };
 		A1E505587320816E1751A947 /* DailyLogCodecTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6BD9E9056155C2B82893EDA6 /* DailyLogCodecTests.swift */; };
 		A2DCE257E978CD6BAFAE2168 /* AtomicFileWriterTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = DDB02A5B746D6AFFE94F389F /* AtomicFileWriterTests.swift */; };
+		AA7EAE384FB2648424CDEEE6 /* FocusSessionEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = CB4718DB3F7149B1C3A2C2F9 /* FocusSessionEngine.swift */; };
 		B9E22BF26DE00534CA7CE529 /* AtomicFileWriter.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000862FD87ECFD14A2EBBD89 /* AtomicFileWriter.swift */; };
 		BD328D7DD66DBB049E79C6ED /* FrontmatterDecoder.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1CAECA9BDEFA889C6DE2EBE9 /* FrontmatterDecoder.swift */; };
 		C71E057857B6BCB5BF0CA4DA /* AtomicFileWriterError.swift in Sources */ = {isa = PBXBuildFile; fileRef = E0BA7BF8D84B73D94EF3157C /* AtomicFileWriterError.swift */; };
@@ -88,6 +90,7 @@
 		BDF05E8048A2CA4C67790C50 /* Category.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Category.swift; sourceTree = "<group>"; };
 		C0E0903987EB31A0547484E3 /* DailyLogStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DailyLogStore.swift; sourceTree = "<group>"; };
 		C76EB463C7C44B3BA54CD43C /* TaskItem.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TaskItem.swift; sourceTree = "<group>"; };
+		CB4718DB3F7149B1C3A2C2F9 /* FocusSessionEngine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FocusSessionEngine.swift; sourceTree = "<group>"; };
 		CD099DA3072484B67CFDD3A0 /* DailyLogCodec.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DailyLogCodec.swift; sourceTree = "<group>"; };
 		CF0567BC0B0379E14C94219B /* VaultStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VaultStore.swift; sourceTree = "<group>"; };
 		DAA99F75D6C0662182DA03AB /* DeadlineDay.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DeadlineDay.swift; sourceTree = "<group>"; };
@@ -95,6 +98,7 @@
 		DDB02A5B746D6AFFE94F389F /* AtomicFileWriterTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AtomicFileWriterTests.swift; sourceTree = "<group>"; };
 		E0BA7BF8D84B73D94EF3157C /* AtomicFileWriterError.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AtomicFileWriterError.swift; sourceTree = "<group>"; };
 		E0CE5BEA0D95F2D356A98AB3 /* Project.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Project.swift; sourceTree = "<group>"; };
+		ED156E35E718B893DF3B1E29 /* FocusSessionEngineTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FocusSessionEngineTests.swift; sourceTree = "<group>"; };
 		F15748CCF586FA0EDEE2F61F /* DailyLogError.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DailyLogError.swift; sourceTree = "<group>"; };
 		F2263127664569F0F7194904 /* VaultStoreError.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VaultStoreError.swift; sourceTree = "<group>"; };
 		F64F2B847F2F64F2D070FE92 /* TaskModelTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TaskModelTests.swift; sourceTree = "<group>"; };
@@ -192,6 +196,7 @@
 				DDB02A5B746D6AFFE94F389F /* AtomicFileWriterTests.swift */,
 				6BD9E9056155C2B82893EDA6 /* DailyLogCodecTests.swift */,
 				B67859164CAD39CDD96B1736 /* DailyLogStoreTests.swift */,
+				ED156E35E718B893DF3B1E29 /* FocusSessionEngineTests.swift */,
 				4D5486D7E5950BEA4B04343F /* FrontmatterCodecTests.swift */,
 				2FD6B094AE292E2B2CFE2055 /* SmokeTests.swift */,
 				20D561F957E51C275426C970 /* StatusTransitionTests.swift */,
@@ -226,6 +231,7 @@
 		FBD6C6C15E9C60AD986DFDC4 /* Domain */ = {
 			isa = PBXGroup;
 			children = (
+				CB4718DB3F7149B1C3A2C2F9 /* FocusSessionEngine.swift */,
 				5F0BA521BD58A62A830A1C10 /* StatusTransition.swift */,
 			);
 			path = Domain;
@@ -321,6 +327,7 @@
 				A2DCE257E978CD6BAFAE2168 /* AtomicFileWriterTests.swift in Sources */,
 				A1E505587320816E1751A947 /* DailyLogCodecTests.swift in Sources */,
 				60C1AF42B5D52D3E66DD88D3 /* DailyLogStoreTests.swift in Sources */,
+				64A3DACB834DD689B2881F95 /* FocusSessionEngineTests.swift in Sources */,
 				13CF5781F461AD63F5372CA9 /* FrontmatterCodecTests.swift in Sources */,
 				5C40816107FF2F8EF9A813F3 /* SmokeTests.swift in Sources */,
 				D28F8691AE913F628117CD75 /* StatusTransitionTests.swift in Sources */,
@@ -346,6 +353,7 @@
 				56F3C426421E25178C5ADC15 /* DailyLogError.swift in Sources */,
 				9469583BB0418CD9B069045C /* DailyLogStore.swift in Sources */,
 				2C75A6F305AE89450722FF81 /* DeadlineDay.swift in Sources */,
+				AA7EAE384FB2648424CDEEE6 /* FocusSessionEngine.swift in Sources */,
 				080247AB874C28B56D0928F1 /* FocusSessionLog.swift in Sources */,
 				47F742470901C6A5A3941939 /* FocusTrackerApp.swift in Sources */,
 				BD328D7DD66DBB049E79C6ED /* FrontmatterDecoder.swift in Sources */,
