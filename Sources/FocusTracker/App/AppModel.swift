@@ -62,6 +62,20 @@ import Observation
 /// already quarantined by the persistence layer — nothing lost, the decision
 /// itself does no I/O).
 ///
+/// # Mini mode (issue #21, PRD §10.2)
+/// `isMiniTimerActive` is an observable flag **beside `.timerView`** — not a
+/// distinct `AppPhase` case (pinned engineer's choice, documented): the
+/// phase stays `.timerView(context)` through a collapse/restore so the full
+/// timer content — and the session it displays — is never torn down and
+/// re-created by a window swap; the flag records only which window
+/// presentation is currently showing. `collapseToMiniTimer()` refuses when
+/// no session is active (the mini panel only exists while a session is
+/// active, issue criterion 5); `restoreFromMiniTimer()` touches nothing but
+/// the flag. `endSession()` clears the flag — the panel closes on a session
+/// end by any path — and also clears the #20 session-number snapshot.
+/// Nothing is persisted: on relaunch the app defaults to the full view (the
+/// #14 recovery flow resurfaces a pending session there).
+///
 /// # Concurrency shape
 /// `@MainActor` throughout: all mutable state is main-actor isolated, the
 /// actor stores are bridged with `await`, and the lock-synchronized
@@ -288,6 +302,23 @@ public final class AppModel {
     /// Tasks view; the #19 start flow swaps it to `.timerView` and
     /// `endSession` swaps it back.
     public private(set) var appPhase: AppPhase = .tasksView
+    /// Mini-mode flag (issue #21, PRD §10.2): true exactly while the main
+    /// window is collapsed to the always-on-top mini panel. Pinned choice: a
+    /// flag beside `.timerView`, NOT a distinct `AppPhase` case (see the
+    /// type documentation) — the phase stays `.timerView(context)` through
+    /// collapse/restore. Set by `collapseToMiniTimer()` (session-active
+    /// only), cleared by `restoreFromMiniTimer()` and by `endSession()` (the
+    /// panel closes on a session end by any path). In-memory only — nothing
+    /// is persisted (issue criterion 5: relaunch defaults to the full view).
+    public private(set) var isMiniTimerActive = false
+    /// The #20 session-number snapshot (issue #21 criterion 2), lifted into
+    /// the model: `TimerView` fetches it once on appear via
+    /// `DailyLogStore.sessions(for:on:)` and records it here; the mini view
+    /// reads the same value with **no refetch**. nil = unavailable (no
+    /// vault, or fetch failure) — the "Session N today" line is gracefully
+    /// omitted in both views. Reset on every new engine session (a fresh
+    /// fetch, never a stale number) and on `endSession()`.
+    public private(set) var sessionNumberToday: Int?
 
     // MARK: - Init
 
@@ -793,7 +824,47 @@ public final class AppModel {
         try coordinator.start(taskID: taskID, duration: duration)
         sessionState = .running
         appPhase = .timerView(context)
+        // A fresh session starts with no session number: the full TimerView
+        // re-fetches its own #20 snapshot on appear (issue #21 criterion 2 —
+        // a stale number from a previous session is never shown).
+        sessionNumberToday = nil
         return .started(context)
+    }
+
+    // MARK: - Mini mode (issue #21, PRD §10.2)
+
+    /// Records the #20 session-number snapshot (issue #21 criterion 2):
+    /// written by the full `TimerView`'s once-on-appear fetch (including an
+    /// explicit `nil` on fetch failure — graceful omission), read by
+    /// `MiniTimerView` with no refetch.
+    public func recordSessionNumberToday(_ number: Int?) {
+        sessionNumberToday = number
+    }
+
+    /// Collapse-to-mini (issue #21 criterion 3, PRD §10.2): flips the
+    /// observable mini-mode flag on. The window swap itself (showing the
+    /// `MiniTimerPanelController` panel, `orderOut`-ing the main window —
+    /// the pinned choice over `miniaturize`) is driven from the observable
+    /// state by `FocusTrackerApp`'s sync, keeping `AppModel` AppKit-free.
+    /// Guards, documented: refuses when **no session is active** (the panel
+    /// only exists while a session is active, issue criterion 5) or the
+    /// phase is not `.timerView` — a silent no-op either way, since the
+    /// control that triggers this only exists on the active-session timer
+    /// view. The session itself is untouched: same coordinator, same engine,
+    /// same `.timerView(context)` phase.
+    public func collapseToMiniTimer() {
+        guard isSessionActive else { return }
+        guard case .timerView = appPhase else { return }
+        isMiniTimerActive = true
+    }
+
+    /// Restore-from-mini (issue #21 criterion 3): flips the mini-mode flag
+    /// off; the phase stays `.timerView(context)` and the session lifecycle
+    /// is untouched — the full timer display is restored by the same
+    /// observable-driven sync. A typed no-op when not collapsed.
+    public func restoreFromMiniTimer() {
+        guard isMiniTimerActive else { return }
+        isMiniTimerActive = false
     }
 
     /// Pauses (coordinator passthrough) and tracks the observable state.
@@ -811,12 +882,18 @@ public final class AppModel {
     /// Ends the session (coordinator passthrough: engine result + snapshot
     /// clear) and returns to idle, swapping the app phase back to
     /// `.tasksView` (the #19 placeholder's minimal end path — #22 owns the
-    /// real end-of-session flow and will compose its own).
+    /// real end-of-session flow and will compose its own). Also clears the
+    /// mini-mode flag — the panel closes on a session end **by any path**
+    /// (issue #21 criterion 5: End from mini, End from full after restore,
+    /// the later #22 flow) — and the #20 session-number snapshot (nothing
+    /// else may show a stale session's number).
     @discardableResult
     public func endSession() throws -> FocusSessionResult {
         let result = try coordinator.end()
         sessionState = .idle
         appPhase = .tasksView
+        isMiniTimerActive = false
+        sessionNumberToday = nil
         return result
     }
 

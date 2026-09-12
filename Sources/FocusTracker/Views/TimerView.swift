@@ -12,8 +12,9 @@ import SwiftUI
 ///
 /// Deliberately NOT shown (pinned do-not-show list, PRD §10.1): elapsed time,
 /// progress percentage, priority, effort, deadline, analytics, next-task
-/// suggestions. The collapse-to-mini control is also absent entirely (#21
-/// adds it together with the mini panel — no dead UI here).
+/// suggestions. The collapse-to-mini control is #21's addition (below) — it
+/// drives the always-on-top mini panel (`MiniTimerPanelController` +
+/// `MiniTimerView`) and is absent from no other state.
 ///
 /// # Temporary End path (carried over from the deleted #19 placeholder)
 /// Nothing is logged or classified here — the end-of-session flow is #22.
@@ -23,7 +24,8 @@ import SwiftUI
 /// invented that #22 would have to undo. #22 replaces this with the
 /// end-of-session modal + logging (marked inline at the confirm handler).
 ///
-/// # Session number today (pinned semantics, issue #20 criterion 1)
+/// # Session number today (pinned semantics, issue #20 criterion 1; lifted
+/// by #21)
 /// Fetched **asynchronously once on view appear** via the #11 helper
 /// `DailyLogStore.sessions(for:on:)` with the date from
 /// `sessionClock.wallClockNow` (clock seam only) — a **snapshot, not
@@ -31,7 +33,10 @@ import SwiftUI
 /// and re-fetches, so sessions ended earlier today on that task are naturally
 /// included (PRD §10.1 self-correction). On fetch failure (or no configured
 /// vault) the session-number line is gracefully **omitted** rather than
-/// disrupting the timer.
+/// disrupting the timer. #21 lifted the recorded value into
+/// `AppModel.sessionNumberToday` so the mini view shows the same snapshot
+/// with no refetch (issue #21 criterion 2); this view reads it back from the
+/// model.
 ///
 /// # Ticking (issue #20 criterion 3)
 /// A `TimelineView(.periodic)` re-renders about once per second and derives
@@ -69,7 +74,6 @@ struct TimerView: View {
     /// Ring stroke width — substantial but calm (PRD §21).
     private static let ringLineWidth: CGFloat = 10
 
-    @State private var sessionNumberToday: Int?
     @State private var showsEndConfirmation = false
 
     var body: some View {
@@ -81,7 +85,7 @@ struct TimerView: View {
                 if !context.categories.isEmpty {
                     categoryChips
                 }
-                if let number = sessionNumberToday {
+                if let number = model.sessionNumberToday {
                     Text("Session \(number) today")
                         .font(DesignTokens.annotationFont)
                         .foregroundStyle(.secondary)
@@ -198,6 +202,20 @@ struct TimerView: View {
 
     private var controls: some View {
         HStack(spacing: DesignTokens.spacingM) {
+            // Collapse-to-mini (issue #21 criterion 3, PRD §10.2): flips the
+            // model's mini-mode flag; the observable-driven sync in
+            // `FocusTrackerApp` shows the mini panel and `orderOut`s this
+            // window (the pinned choice over `miniaturize`). `TimerView`
+            // only exists while a session is active, so the control can
+            // never appear while idle; `collapseToMiniTimer()` still guards
+            // session-active (issue criterion 5).
+            Button {
+                model.collapseToMiniTimer()
+            } label: {
+                Label("Mini", systemImage: "pip.enter")
+            }
+            .buttonStyle(.bordered)
+            .help("Collapse to the always-on-top mini timer")
             // Label swaps Pause ↔ Resume (issue #20 criterion 4); the paused
             // state itself is shown on the ring (dimming above).
             Button(displayState().isPaused ? "Resume" : "Pause") { togglePause() }
@@ -253,20 +271,26 @@ struct TimerView: View {
         _ = try? model.endSession()
     }
 
-    /// The pinned snapshot fetch (issue #20 criterion 1): run once on view
-    /// appear via the #11 `DailyLogStore.sessions(for:on:)` helper, dated by
-    /// the session clock seam. Not live-polled — see the type documentation.
-    /// Graceful degradation: no vault, or a fetch failure, leaves the line
-    /// omitted (`sessionNumberToday == nil`) instead of disrupting the timer.
+    /// The pinned snapshot fetch (issue #20 criterion 1; lifted by #21 into
+    /// `AppModel.sessionNumberToday` so the mini view reuses the value with
+    /// no refetch, issue #21 criterion 2): run once on view appear via the
+    /// #11 `DailyLogStore.sessions(for:on:)` helper, dated by the session
+    /// clock seam. Not live-polled — see the type documentation. Graceful
+    /// degradation: no vault, or a fetch failure, records `nil` (line
+    /// omitted) instead of disrupting the timer.
     private func loadSessionNumber() async {
-        guard let store = model.dailyLogStore else { return }
+        guard let store = model.dailyLogStore else {
+            model.recordSessionNumberToday(nil)
+            return
+        }
         do {
             let sessions = try await store.sessions(
                 for: context.taskID, on: model.sessionClock.wallClockNow)
-            sessionNumberToday = TimerDisplay.sessionNumber(fromSessions: sessions)
+            model.recordSessionNumberToday(
+                TimerDisplay.sessionNumber(fromSessions: sessions))
         } catch {
             // Documented graceful degradation (see above): omit the line.
-            sessionNumberToday = nil
+            model.recordSessionNumberToday(nil)
         }
     }
 }
