@@ -8,18 +8,22 @@
 
 /* Begin PBXBuildFile section */
 		05AC78D4781BF0F715D8B280 /* TaskCompletion.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC47B30A5701AAE8E38FA746 /* TaskCompletion.swift */; };
+		080247AB874C28B56D0928F1 /* FocusSessionLog.swift in Sources */ = {isa = PBXBuildFile; fileRef = 66A29F2C81A436A0250803FE /* FocusSessionLog.swift */; };
 		08D3ABF571F1DD6DB2811E0F /* Yams in Frameworks */ = {isa = PBXBuildFile; productRef = 39E84D3D517CF65CE8CDEA40 /* Yams */; };
 		0C0890159FFBB5CADECDDDF0 /* VaultStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = CF0567BC0B0379E14C94219B /* VaultStore.swift */; };
 		13CF5781F461AD63F5372CA9 /* FrontmatterCodecTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4D5486D7E5950BEA4B04343F /* FrontmatterCodecTests.swift */; };
 		1EFB3035F6011B2244B38BE2 /* VaultStoreWriteTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 36866CB5BBBDD9DC3EA4B5C5 /* VaultStoreWriteTests.swift */; };
 		2C75A6F305AE89450722FF81 /* DeadlineDay.swift in Sources */ = {isa = PBXBuildFile; fileRef = DAA99F75D6C0662182DA03AB /* DeadlineDay.swift */; };
 		335FFAE1E20D5816ACF0D335 /* FrontmatterSplitter.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9E370EA1340964AFF7C24132 /* FrontmatterSplitter.swift */; };
+		3D0BD19FB6B7D674DA97EB7D /* BreakLog.swift in Sources */ = {isa = PBXBuildFile; fileRef = DC84AC2DC56876A49D1A4261 /* BreakLog.swift */; };
 		443D3CE32D51A6DF3ADCDBA3 /* FrontmatterEncoder.swift in Sources */ = {isa = PBXBuildFile; fileRef = 496B467448E0EBB4F9699080 /* FrontmatterEncoder.swift */; };
 		45A81F7A943E732699E4E9AF /* TaskOrdering.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7E223517EDAFBC6628F2E5D6 /* TaskOrdering.swift */; };
 		47F742470901C6A5A3941939 /* FocusTrackerApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 248E5131297EB06C2E76BC68 /* FocusTrackerApp.swift */; };
 		4866585A7AACB6576688B9BF /* TaskOrderingTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 95709B12E9BA98C14EF8CEAB /* TaskOrderingTests.swift */; };
+		56F3C426421E25178C5ADC15 /* DailyLogError.swift in Sources */ = {isa = PBXBuildFile; fileRef = F15748CCF586FA0EDEE2F61F /* DailyLogError.swift */; };
 		5811C92D98367DEC729F7EA1 /* VaultStoreTransitionTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B0C967C88404484608223706 /* VaultStoreTransitionTests.swift */; };
 		5C40816107FF2F8EF9A813F3 /* SmokeTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2FD6B094AE292E2B2CFE2055 /* SmokeTests.swift */; };
+		60C1AF42B5D52D3E66DD88D3 /* DailyLogStoreTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B67859164CAD39CDD96B1736 /* DailyLogStoreTests.swift */; };
 		637271F24F8DCCFC153B40B0 /* StatusTransition.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5F0BA521BD58A62A830A1C10 /* StatusTransition.swift */; };
 		6D529C027DDC08698272BBCA /* VaultStoreStatusTransitions.swift in Sources */ = {isa = PBXBuildFile; fileRef = 84025FD8E3B25790B7D988C9 /* VaultStoreStatusTransitions.swift */; };
 		71C6973B688B2079F118533E /* SubtaskItem.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2C3DCD0FA4C4F11707ADCC34 /* SubtaskItem.swift */; };
@@ -30,12 +34,16 @@
 		84E73409362F826BDBE0669B /* FrontmatterError.swift in Sources */ = {isa = PBXBuildFile; fileRef = F9C6D88FF4AC946BB7DB89A5 /* FrontmatterError.swift */; };
 		8AC9CCA7D1AB50AABF043CF0 /* Category.swift in Sources */ = {isa = PBXBuildFile; fileRef = BDF05E8048A2CA4C67790C50 /* Category.swift */; };
 		8DC94FF8D60CDCCA3EFE6439 /* TaskEnums.swift in Sources */ = {isa = PBXBuildFile; fileRef = AEA22B891260224B50F53902 /* TaskEnums.swift */; };
+		9469583BB0418CD9B069045C /* DailyLogStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0E0903987EB31A0547484E3 /* DailyLogStore.swift */; };
+		A1E505587320816E1751A947 /* DailyLogCodecTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6BD9E9056155C2B82893EDA6 /* DailyLogCodecTests.swift */; };
 		A2DCE257E978CD6BAFAE2168 /* AtomicFileWriterTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = DDB02A5B746D6AFFE94F389F /* AtomicFileWriterTests.swift */; };
 		B9E22BF26DE00534CA7CE529 /* AtomicFileWriter.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000862FD87ECFD14A2EBBD89 /* AtomicFileWriter.swift */; };
 		BD328D7DD66DBB049E79C6ED /* FrontmatterDecoder.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1CAECA9BDEFA889C6DE2EBE9 /* FrontmatterDecoder.swift */; };
 		C71E057857B6BCB5BF0CA4DA /* AtomicFileWriterError.swift in Sources */ = {isa = PBXBuildFile; fileRef = E0BA7BF8D84B73D94EF3157C /* AtomicFileWriterError.swift */; };
 		CD6092F00DDF72B36F057846 /* VaultStoreError.swift in Sources */ = {isa = PBXBuildFile; fileRef = F2263127664569F0F7194904 /* VaultStoreError.swift */; };
 		D28F8691AE913F628117CD75 /* StatusTransitionTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 20D561F957E51C275426C970 /* StatusTransitionTests.swift */; };
+		D34EBE82EA8F20AF4E6F1D02 /* DailyLogDay.swift in Sources */ = {isa = PBXBuildFile; fileRef = 449D8FADD940BEE8778B592B /* DailyLogDay.swift */; };
+		DCDFB50E7152BF60B08454D3 /* DailyLogCodec.swift in Sources */ = {isa = PBXBuildFile; fileRef = CD099DA3072484B67CFDD3A0 /* DailyLogCodec.swift */; };
 		DF5EA0555990FD6FC645C434 /* VaultStoreTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 28BA6F82E572C982197E1959 /* VaultStoreTests.swift */; };
 		FB83696C4D6A3A0A58D84EB1 /* Project.swift in Sources */ = {isa = PBXBuildFile; fileRef = E0CE5BEA0D95F2D356A98AB3 /* Project.swift */; };
 /* End PBXBuildFile section */
@@ -62,9 +70,12 @@
 		2C3DCD0FA4C4F11707ADCC34 /* SubtaskItem.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SubtaskItem.swift; sourceTree = "<group>"; };
 		2FD6B094AE292E2B2CFE2055 /* SmokeTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SmokeTests.swift; sourceTree = "<group>"; };
 		36866CB5BBBDD9DC3EA4B5C5 /* VaultStoreWriteTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VaultStoreWriteTests.swift; sourceTree = "<group>"; };
+		449D8FADD940BEE8778B592B /* DailyLogDay.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DailyLogDay.swift; sourceTree = "<group>"; };
 		496B467448E0EBB4F9699080 /* FrontmatterEncoder.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FrontmatterEncoder.swift; sourceTree = "<group>"; };
 		4D5486D7E5950BEA4B04343F /* FrontmatterCodecTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FrontmatterCodecTests.swift; sourceTree = "<group>"; };
 		5F0BA521BD58A62A830A1C10 /* StatusTransition.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StatusTransition.swift; sourceTree = "<group>"; };
+		66A29F2C81A436A0250803FE /* FocusSessionLog.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FocusSessionLog.swift; sourceTree = "<group>"; };
+		6BD9E9056155C2B82893EDA6 /* DailyLogCodecTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DailyLogCodecTests.swift; sourceTree = "<group>"; };
 		7E223517EDAFBC6628F2E5D6 /* TaskOrdering.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TaskOrdering.swift; sourceTree = "<group>"; };
 		84025FD8E3B25790B7D988C9 /* VaultStoreStatusTransitions.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VaultStoreStatusTransitions.swift; sourceTree = "<group>"; };
 		95709B12E9BA98C14EF8CEAB /* TaskOrderingTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TaskOrderingTests.swift; sourceTree = "<group>"; };
@@ -72,14 +83,19 @@
 		AC47B30A5701AAE8E38FA746 /* TaskCompletion.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TaskCompletion.swift; sourceTree = "<group>"; };
 		AEA22B891260224B50F53902 /* TaskEnums.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TaskEnums.swift; sourceTree = "<group>"; };
 		B0C967C88404484608223706 /* VaultStoreTransitionTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VaultStoreTransitionTests.swift; sourceTree = "<group>"; };
+		B67859164CAD39CDD96B1736 /* DailyLogStoreTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DailyLogStoreTests.swift; sourceTree = "<group>"; };
 		BCE466B78BD1A66F6A5A44BD /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
 		BDF05E8048A2CA4C67790C50 /* Category.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Category.swift; sourceTree = "<group>"; };
+		C0E0903987EB31A0547484E3 /* DailyLogStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DailyLogStore.swift; sourceTree = "<group>"; };
 		C76EB463C7C44B3BA54CD43C /* TaskItem.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TaskItem.swift; sourceTree = "<group>"; };
+		CD099DA3072484B67CFDD3A0 /* DailyLogCodec.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DailyLogCodec.swift; sourceTree = "<group>"; };
 		CF0567BC0B0379E14C94219B /* VaultStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VaultStore.swift; sourceTree = "<group>"; };
 		DAA99F75D6C0662182DA03AB /* DeadlineDay.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DeadlineDay.swift; sourceTree = "<group>"; };
+		DC84AC2DC56876A49D1A4261 /* BreakLog.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BreakLog.swift; sourceTree = "<group>"; };
 		DDB02A5B746D6AFFE94F389F /* AtomicFileWriterTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AtomicFileWriterTests.swift; sourceTree = "<group>"; };
 		E0BA7BF8D84B73D94EF3157C /* AtomicFileWriterError.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AtomicFileWriterError.swift; sourceTree = "<group>"; };
 		E0CE5BEA0D95F2D356A98AB3 /* Project.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Project.swift; sourceTree = "<group>"; };
+		F15748CCF586FA0EDEE2F61F /* DailyLogError.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DailyLogError.swift; sourceTree = "<group>"; };
 		F2263127664569F0F7194904 /* VaultStoreError.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VaultStoreError.swift; sourceTree = "<group>"; };
 		F64F2B847F2F64F2D070FE92 /* TaskModelTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TaskModelTests.swift; sourceTree = "<group>"; };
 		F9C6D88FF4AC946BB7DB89A5 /* FrontmatterError.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FrontmatterError.swift; sourceTree = "<group>"; };
@@ -108,7 +124,9 @@
 		1110256E59A63D28755EA8AA /* Models */ = {
 			isa = PBXGroup;
 			children = (
+				DC84AC2DC56876A49D1A4261 /* BreakLog.swift */,
 				BDF05E8048A2CA4C67790C50 /* Category.swift */,
+				66A29F2C81A436A0250803FE /* FocusSessionLog.swift */,
 				E0CE5BEA0D95F2D356A98AB3 /* Project.swift */,
 				2C3DCD0FA4C4F11707ADCC34 /* SubtaskItem.swift */,
 				AC47B30A5701AAE8E38FA746 /* TaskCompletion.swift */,
@@ -151,6 +169,10 @@
 			children = (
 				000862FD87ECFD14A2EBBD89 /* AtomicFileWriter.swift */,
 				E0BA7BF8D84B73D94EF3157C /* AtomicFileWriterError.swift */,
+				CD099DA3072484B67CFDD3A0 /* DailyLogCodec.swift */,
+				449D8FADD940BEE8778B592B /* DailyLogDay.swift */,
+				F15748CCF586FA0EDEE2F61F /* DailyLogError.swift */,
+				C0E0903987EB31A0547484E3 /* DailyLogStore.swift */,
 				DAA99F75D6C0662182DA03AB /* DeadlineDay.swift */,
 				1CAECA9BDEFA889C6DE2EBE9 /* FrontmatterDecoder.swift */,
 				496B467448E0EBB4F9699080 /* FrontmatterEncoder.swift */,
@@ -168,6 +190,8 @@
 			isa = PBXGroup;
 			children = (
 				DDB02A5B746D6AFFE94F389F /* AtomicFileWriterTests.swift */,
+				6BD9E9056155C2B82893EDA6 /* DailyLogCodecTests.swift */,
+				B67859164CAD39CDD96B1736 /* DailyLogStoreTests.swift */,
 				4D5486D7E5950BEA4B04343F /* FrontmatterCodecTests.swift */,
 				2FD6B094AE292E2B2CFE2055 /* SmokeTests.swift */,
 				20D561F957E51C275426C970 /* StatusTransitionTests.swift */,
@@ -295,6 +319,8 @@
 			buildActionMask = 2147483647;
 			files = (
 				A2DCE257E978CD6BAFAE2168 /* AtomicFileWriterTests.swift in Sources */,
+				A1E505587320816E1751A947 /* DailyLogCodecTests.swift in Sources */,
+				60C1AF42B5D52D3E66DD88D3 /* DailyLogStoreTests.swift in Sources */,
 				13CF5781F461AD63F5372CA9 /* FrontmatterCodecTests.swift in Sources */,
 				5C40816107FF2F8EF9A813F3 /* SmokeTests.swift in Sources */,
 				D28F8691AE913F628117CD75 /* StatusTransitionTests.swift in Sources */,
@@ -313,8 +339,14 @@
 			files = (
 				B9E22BF26DE00534CA7CE529 /* AtomicFileWriter.swift in Sources */,
 				C71E057857B6BCB5BF0CA4DA /* AtomicFileWriterError.swift in Sources */,
+				3D0BD19FB6B7D674DA97EB7D /* BreakLog.swift in Sources */,
 				8AC9CCA7D1AB50AABF043CF0 /* Category.swift in Sources */,
+				DCDFB50E7152BF60B08454D3 /* DailyLogCodec.swift in Sources */,
+				D34EBE82EA8F20AF4E6F1D02 /* DailyLogDay.swift in Sources */,
+				56F3C426421E25178C5ADC15 /* DailyLogError.swift in Sources */,
+				9469583BB0418CD9B069045C /* DailyLogStore.swift in Sources */,
 				2C75A6F305AE89450722FF81 /* DeadlineDay.swift in Sources */,
+				080247AB874C28B56D0928F1 /* FocusSessionLog.swift in Sources */,
 				47F742470901C6A5A3941939 /* FocusTrackerApp.swift in Sources */,
 				BD328D7DD66DBB049E79C6ED /* FrontmatterDecoder.swift in Sources */,
 				443D3CE32D51A6DF3ADCDBA3 /* FrontmatterEncoder.swift in Sources */,
