@@ -16,16 +16,19 @@ extension FrontmatterCodec {
     ///     effort: L               ← optional; omitted when nil
     ///     deadline: 2026-10-15    ← optional; omitted when nil (yyyy-MM-dd, UTC)
     ///     notes: …                ← optional; omitted when nil
+    ///     order: 3                ← optional; omitted when nil (tasks only,
+    ///                               never `order: null` — issue #10)
     ///     subtasks:               ← omitted when empty; recursive, same shape
     ///       - id: …                 (id, title, status, priority, effort,
-    ///         title: …               deadline, notes, subtasks; no project/categories)
+    ///         title: …               deadline, notes, subtasks; no project/categories/order)
     ///     ---
     ///     <body, byte-for-byte>
     ///
     /// Canonical-form rules (chosen for byte-stability: serialize → parse → serialize
     /// is the identity):
-    /// - **Key order** is fixed as above; subtask entries use the same order minus
-    ///   `project`/`categories` (`SubtaskItem.children` persists under `subtasks`).
+    /// - **Key order** is fixed as above; subtask entries use the same order
+    ///   minus `project`/`categories`/`order` (`SubtaskItem.children` persists
+    ///   under `subtasks`).
     /// - **Quoting** is delegated to Yams' emitter (plain when safe, quoted otherwise,
     ///   Unicode kept literal). Strings that YAML would resolve as a non-string scalar
     ///   (`true`, `123`, `2026-10-15`, …), strings containing newlines or control
@@ -59,6 +62,14 @@ extension FrontmatterCodec {
         }
         if let notes = task.notes {
             lines.append("notes: \(scalar(notes))")
+        }
+        // `order` (issue #10) is written only when non-nil — never as a null
+        // key — in the pinned slot between `notes` and `subtasks`, grouped with
+        // the trailing optionals. A plain decimal int (incl. `0` and negatives)
+        // always re-parses as an int, so no quoting is needed. Subtasks never
+        // carry `order`.
+        if let order = task.order {
+            lines.append("order: \(order)")
         }
         lines.append(contentsOf: subtaskLines(task.subtasks, atIndent: ""))
         return "---\n" + lines.joined(separator: "\n") + "\n---\n" + body

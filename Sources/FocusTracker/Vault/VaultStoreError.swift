@@ -85,6 +85,24 @@ public enum VaultStoreError: Error, Equatable, Sendable, CustomStringConvertible
     /// rejected order. Nothing is written.
     case reorderNotExactPermutation(currentSiblings: [UUID], proposedOrder: [UUID])
 
+    // MARK: Manual task ordering (issue #10)
+
+    /// `applyOrdering(groupUpdates:)` failed partway through its batch. PRD §18
+    /// atomicity is **per file** and each task is its own file, so the batch is
+    /// deliberately *not* cross-file atomic: some task files may already carry
+    /// their new order. `completed` names the files that were fully written and
+    /// inventory-synced (ID → filename, in application order); `pending` names
+    /// the tasks whose files were **not** written by this batch — the failing
+    /// task itself (its whole-file write is atomic, so the file is untouched)
+    /// and every task not attempted. `underlying` is the #7-path error that
+    /// aborted the batch (`.vaultChangedExternally`, `.writeFailed`, …). The
+    /// caller's recovery path is `load()` (refreshes the staleness-guard
+    /// records) then retrying the pending updates. (`indirect` on this case
+    /// only — the recursion through `underlying` must not box every other
+    /// error payload.)
+    indirect case orderingBatchIncomplete(
+        completed: [UUID: String], pending: [UUID: String], underlying: VaultStoreError)
+
     public var description: String {
         switch self {
         case .duplicateTaskID(let id, let firstFile):
@@ -116,6 +134,9 @@ public enum VaultStoreError: Error, Equatable, Sendable, CustomStringConvertible
         case .reorderNotExactPermutation(let currentSiblings, let proposedOrder):
             return
                 "reorder refused: the proposed sibling order is not an exact permutation of the current list — current \(currentSiblings.map(\.uuidString)), proposed \(proposedOrder.map(\.uuidString))"
+        case .orderingBatchIncomplete(let completed, let pending, let underlying):
+            return
+                "ordering batch incomplete: \(completed.count) file(s) written, \(pending.count) task(s) pending — not cross-file atomic, recover with load() + retry; underlying: \(underlying)"
         }
     }
 }

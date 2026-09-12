@@ -32,6 +32,13 @@ import Foundation
 /// (consumed as-is, never written here). `lastLoadState`/`warnings` keep
 /// describing the last load, same as all writes.
 ///
+/// **Manual task ordering (#10):** `applyOrdering(groupUpdates:)` persists the
+/// per-(project, status)-group manual ordering through the same #7 update path;
+/// the pure display/renumbering rules live in `TaskOrdering`. The multi-file
+/// batch is per-file atomic only — a mid-batch failure surfaces typed
+/// `.orderingBatchIncomplete` naming completed vs. pending files; see the
+/// method's documentation.
+///
 /// **Write-side internal state (rebuilt at every load, maintained by every
 /// write):**
 /// - `fileNameByTaskID` — the filename↔ID mapping; the #6 filename-sorted
@@ -453,6 +460,92 @@ public actor VaultStore {
         var updated = tasks[index]
         updated.status = status
         return try update(updated)
+    }
+
+    // MARK: - Manual task ordering (issue #10, PRD §8.4)
+
+    /// Applies a batch of `ID → new order` updates for top-level tasks and
+    /// persists each affected task's file (issue #10, PRD §8.4).
+    ///
+    /// - **Validate first:** every ID is checked against the inventory before
+    ///   anything is written. An ID that is not loaded fails
+    ///   `.unknownTaskID`; an ID that belongs to a subtask fails
+    ///   `.notTopLevelTask` (same convention as #7's `setStatus` — ordering is
+    ///   a top-level field). Both abort the batch with *nothing* written.
+    ///   Offending IDs are reported deterministically (UUID-string-sorted).
+    /// - **Changed tasks only:** a task whose current `order` already equals
+    ///   the requested value is skipped (no write, no byte-record churn). The
+    ///   batch the #18 UI passes is `TaskOrdering.reorder`'s changed-only
+    ///   output, so this is a defensive no-op guard; an empty map writes
+    ///   nothing.
+    /// - **Per-task writes** ride the existing #7 `update` path exactly:
+    ///   filename resolved via the load-time mapping (never re-derived from a
+    ///   title), `requireTasksDirectory()`, the reload-before-write staleness
+    ///   guard, body re-attached byte-for-byte, atomic temp+rename via #5 —
+    ///   with the in-memory inventory and byte records synced after **each**
+    ///   success, so `tasks`/`taskCount`/`lookup(_:)` match disk with no
+    ///   reload. `lastLoadState`/`warnings` keep describing the last load.
+    /// - **Deterministic application order:** inventory order
+    ///   (filename-sorted), which makes both the write sequence and the
+    ///   completed/pending split of a mid-batch failure reproducible.
+    /// - **NOT cross-file atomic (documented honestly):** PRD §18 atomicity is
+    ///   per file and each task is its own file, so a mid-batch failure —
+    ///   `.vaultChangedExternally`, `.writeFailed`, … — can leave some files
+    ///   reordered and others not. The failure surfaces typed as
+    ///   `.orderingBatchIncomplete(completed:pending:underlying:)` naming the
+    ///   files written vs. not written (the failing task's own file is
+    ///   untouched — its whole-file write is atomic). The recovery path is
+    ///   `load()` then retry of the pending updates. After a failure the
+    ///   inventory still matches disk for every file (written ones were
+    ///   synced, untouched ones never diverged); the stale byte record of an
+    ///   externally changed file is only refreshed by the reload.
+    ///
+    /// - Returns: The updated tasks, in application (inventory) order.
+    @discardableResult
+    public func applyOrdering(groupUpdates: [UUID: Int]) throws -> [TaskItem] {
+        // Validate every ID before writing anything (documented above).
+        let knownIDs = Set(tasks.map(\.id))
+        for id in groupUpdates.keys.sorted(by: { $0.uuidString < $1.uuidString }) {
+            if knownIDs.contains(id) { continue }
+            if tasks.contains(where: { $0.chain(to: id) != nil }) {
+                throw VaultStoreError.notTopLevelTask(id)
+            }
+            throw VaultStoreError.unknownTaskID(id)
+        }
+
+        // The work list in deterministic application order (inventory order),
+        // restricted to tasks whose persisted value actually changes.
+        let workList: [(id: UUID, fileName: String, newOrder: Int)] = tasks.compactMap { task in
+            guard let newOrder = groupUpdates[task.id], task.order != newOrder,
+                let fileName = fileNameByTaskID[task.id]
+            else { return nil }
+            return (task.id, fileName, newOrder)
+        }
+
+        var completed: [UUID: String] = [:]
+        var applied: [TaskItem] = []
+        for (index, entry) in workList.enumerated() {
+            // The inventory holds the task's current content; only `order`
+            // changes. (The actor serializes writers, so nothing can move
+            // between validation and write; the lookup fails closed anyway.)
+            guard let current = tasks.first(where: { $0.id == entry.id }) else {
+                throw VaultStoreError.unknownTaskID(entry.id)
+            }
+            var mutated = current
+            mutated.order = entry.newOrder
+            do {
+                applied.append(try update(mutated))
+                completed[entry.id] = entry.fileName
+            } catch let error as VaultStoreError {
+                // The failing task plus everything after it was not written —
+                // its whole-file write is atomic, so nothing of it landed.
+                let pending = Dictionary(
+                    uniqueKeysWithValues: workList[index...].map { ($0.id, $0.fileName) })
+                throw VaultStoreError.orderingBatchIncomplete(
+                    completed: completed, pending: pending, underlying: error)
+            }
+        }
+        return applied
     }
 
     // MARK: - Subtask CRUD (issue #8, PRD §5.4, §7, §18)

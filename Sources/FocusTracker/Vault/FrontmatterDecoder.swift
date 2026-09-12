@@ -39,7 +39,7 @@ extension FrontmatterCodec {
 
     private static let taskKeys: Set<String> = [
         "id", "title", "status", "categories", "project",
-        "priority", "effort", "deadline", "notes", "subtasks",
+        "priority", "effort", "deadline", "notes", "order", "subtasks",
     ]
 
     private static let subtaskKeys: Set<String> = [
@@ -59,11 +59,12 @@ extension FrontmatterCodec {
         let effort = try optionalEnum(Effort.self, field: "effort", in: mapping)
         let deadline = try optionalDeadline(in: mapping)
         let notes = try optionalString("notes", in: mapping)
+        let order = try optionalOrder(in: mapping)
         let subtasks = try subtasks(in: mapping)
         return try TaskItem(
             id: id, title: title, categories: categories, status: status,
             project: project, priority: priority, effort: effort,
-            deadline: deadline, notes: notes, subtasks: subtasks)
+            deadline: deadline, notes: notes, order: order, subtasks: subtasks)
     }
 
     private static func subtasks(in mapping: Node.Mapping) throws -> [SubtaskItem] {
@@ -215,6 +216,26 @@ extension FrontmatterCodec {
             }
             return Category(name: raw)
         }
+    }
+
+    /// Reads the optional top-level task `order` (issue #10): the absent key and
+    /// an explicit null (`order:`, `order: null`, `order: ~`) decode to `nil`
+    /// (unordered, via `value(_:in:)`). Only a plain, int-tagged scalar is
+    /// accepted — quoted digits (`'5'`), floats, bools and everything else fail
+    /// with a typed `FrontmatterError` (PRD §18: no silent coercion). Subtasks
+    /// have no `order` — the key stays outside `subtaskKeys`.
+    private static func optionalOrder(in mapping: Node.Mapping) throws -> Int? {
+        guard let node = value("order", in: mapping) else { return nil }
+        guard
+            case .scalar(let scalar) = node,
+            scalar.style == .plain,
+            node.tag.rawValue == Tag.Name.int.rawValue,
+            let parsed = Int(scalar.string)
+        else {
+            throw FrontmatterError.wrongType(
+                field: "order", value: summary(of: node), expected: "integer")
+        }
+        return parsed
     }
 
     private static func optionalDeadline(in mapping: Node.Mapping) throws -> Date? {

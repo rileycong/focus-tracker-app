@@ -3,8 +3,8 @@ import Foundation
 /// The top-level task type (PRD §6.1–§6.8, §7).
 ///
 /// `title`, `categories` (at least one) and `status` are required at
-/// construction; `project`, `priority`, `effort`, `deadline` and `notes` are
-/// optional. Subtasks nest recursively via `subtasks`.
+/// construction; `project`, `priority`, `effort`, `deadline`, `notes` and
+/// `order` are optional. Subtasks nest recursively via `subtasks`.
 public struct TaskItem: Identifiable, Hashable, Sendable, Codable {
     /// Error thrown when a task is constructed without any category (PRD §6.3).
     public enum ValidationError: Error, Equatable, Sendable {
@@ -20,6 +20,12 @@ public struct TaskItem: Identifiable, Hashable, Sendable, Codable {
     public var effort: Effort?
     public var deadline: Date?
     public var notes: String?
+    /// Manual ordering within the task's (project, status) group (PRD §8.4,
+    /// issue #10). `nil` = unordered; unordered tasks display last, in
+    /// filename-sorted inventory order. Only relative order within a group
+    /// matters — absolute values are meaningless. Top-level tasks only;
+    /// subtasks carry no `order` (their ordering is the file's list order).
+    public var order: Int?
     public var subtasks: [SubtaskItem]
 
     /// Creates a task, enforcing at least one category (PRD §6.3).
@@ -33,6 +39,7 @@ public struct TaskItem: Identifiable, Hashable, Sendable, Codable {
         effort: Effort? = nil,
         deadline: Date? = nil,
         notes: String? = nil,
+        order: Int? = nil,
         subtasks: [SubtaskItem] = []
     ) throws {
         guard !categories.isEmpty else {
@@ -47,6 +54,7 @@ public struct TaskItem: Identifiable, Hashable, Sendable, Codable {
         self.effort = effort
         self.deadline = deadline
         self.notes = notes
+        self.order = order
         self.subtasks = subtasks
     }
 }
