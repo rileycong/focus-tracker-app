@@ -98,7 +98,11 @@ import Observation
 /// outcomes that leave the modal (`.success`, `.completionFailedAfterLog`)
 /// stop at `.postSessionChoice` — the explicit Start Next Session / Take
 /// Break choice, nothing auto-starting — instead of landing directly on
-/// Tasks; `.logAppendFailed` keeps the modal up for retry.
+/// Tasks; `.logAppendFailed` keeps the modal up for retry. Issue #27 adds
+/// the escape hatch for that state (`discardEndOfSession` — typed confirm
+/// in the modal drops the unsubmitted result, honest §18 loss, nothing
+/// written) and reconciles the composed log's whole-minute fields so the
+/// append check passes for ANY session (see `EndOfSessionFormState.makeLog`).
 ///
 /// # Break flow (issue #23, PRD §14)
 /// The opt-in break behind the post-submission choice: `takeBreak(duration:)`
@@ -1398,6 +1402,27 @@ public final class AppModel {
         forEndedAt endedAt: Date, calendar: Calendar = .current
     ) -> Date {
         calendar.startOfDay(for: endedAt)
+    }
+
+    /// The #27 escape hatch for a `.logAppendFailed`-trapped modal: drops
+    /// the whole unsubmitted end-of-session flow — the in-memory result is
+    /// DISCARDED and the phase moves to `.tasksView`. Nothing is written to
+    /// any log (no day file is read, created or modified).
+    ///
+    /// **Honest §18 loss, documented inline (and surfaced in the modal's
+    /// typed confirm):** the in-memory result is the ONLY copy of the
+    /// session — the snapshot was already cleared at the confirm-End step —
+    /// so discarding permanently loses the unsubmitted session. That is the
+    /// user's explicit, confirmed choice (the modal offers this only after
+    /// a failed append, destructive-styled behind a confirmation dialog),
+    /// and it exists so the blocking modal can never trap: retry stays
+    /// available, but a deterministic failure must not hold the app
+    /// hostage. A typed no-op outside `.endingSession` (the control only
+    /// exists in the failing modal — the `chooseStartNextSession` guard
+    /// precedent).
+    func discardEndOfSession() {
+        guard case .endingSession = appPhase else { return }
+        appPhase = .tasksView
     }
 
     // MARK: - Break flow (issue #23, PRD §14)

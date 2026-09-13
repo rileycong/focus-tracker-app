@@ -418,6 +418,97 @@ final class DailyLogStoreTests: XCTestCase {
         XCTAssertEqual(try bytes(at: url), original, "file must be untouched")
     }
 
+    // MARK: - Session check at whole-minute granularity (issue #27)
+
+    func testSubMinuteSpanWithMinuteSumAppendsIssue27Repro() async throws {
+        // The #27 repro: a 66 s span with focused 1 / paused 0 — under the
+        // old exact-second check this could NEVER pass (66 ≠ 60·k); the
+        // #27 amendment compares nearest(66/60) == 1 == 1 + 0.
+        let store = makeStore()
+        let date = try day("2026-09-10T09:00:00")
+        let repro = try makeSession(
+            taskID: Self.taskAID, start: "2026-09-10T09:00:00", end: "2026-09-10T09:01:06",
+            focused: 1, paused: 0, notes: nil)
+        try await store.appendSession(repro, to: date)
+        let parsed = try await store.readDay(for: date)
+        XCTAssertEqual(parsed.sessions, [repro])
+    }
+
+    func testWholeMinuteSpanStillAppends() async throws {
+        // The amendment does not loosen the aligned case: a 60 s span with
+        // a 1-minute sum appends exactly as before.
+        let store = makeStore()
+        let date = try day("2026-09-10T09:00:00")
+        let aligned = try makeSession(
+            taskID: Self.taskAID, start: "2026-09-10T09:00:00", end: "2026-09-10T09:01:00",
+            focused: 1, paused: 0, notes: nil)
+        try await store.appendSession(aligned, to: date)
+        let parsed = try await store.readDay(for: date)
+        XCTAssertEqual(parsed.sessions, [aligned])
+    }
+
+    func testMinuteSumOffByOneMinuteFromSpanStillFails() async throws {
+        // The check still catches real corruption: a 3600 s span vs a
+        // 61-minute sum — nearest(3600/60) = 60 ≠ 61.
+        let store = makeStore()
+        let corrupted = try makeSession(
+            taskID: Self.taskAID, start: "2026-09-10T10:00:00", end: "2026-09-10T11:00:00",
+            focused: 30, paused: 31, notes: nil)
+        await expectError(
+            .sessionArithmeticMismatch(
+                sessionID: corrupted.sessionID,
+                startedAt: "2026-09-10T10:00:00",
+                endedAt: "2026-09-10T11:00:00",
+                focusedMinutes: 30,
+                pausedMinutes: 31,
+                spanSeconds: 3600)
+        ) {
+            try await store.appendSession(corrupted, to: try day("2026-09-10T10:00:00"))
+        }
+        XCTAssertFalse(FileManager.default.fileExists(
+            atPath: logFile("2026-09-10.md").path(percentEncoded: false)),
+            "a rejected append must not create the file")
+    }
+
+    func testNegativeSpanStillFails() async throws {
+        // ended before started: −30 s → nearest(−0.5) = −1 (away from zero)
+        // ≠ the 0-minute sum — a negative span still fails, unchanged.
+        let store = makeStore()
+        let negative = try makeSession(
+            taskID: Self.taskAID, start: "2026-09-10T10:00:30", end: "2026-09-10T10:00:00",
+            focused: 0, paused: 0, notes: nil)
+        await expectError(
+            .sessionArithmeticMismatch(
+                sessionID: negative.sessionID,
+                startedAt: "2026-09-10T10:00:30",
+                endedAt: "2026-09-10T10:00:00",
+                focusedMinutes: 0,
+                pausedMinutes: 0,
+                spanSeconds: -30)
+        ) {
+            try await store.appendSession(negative, to: try day("2026-09-10T10:00:00"))
+        }
+    }
+
+    func testNonFiniteSpanStillFailsAtCodecLevel() throws {
+        // `exactSpanSeconds` maps a non-finite interval to 0 (nothing
+        // traps); the check then fails against the non-negative minute sum,
+        // unchanged. Asserted at the codec level — the append would fail
+        // before any I/O, so no day file is involved.
+        let nonFinite = FocusSessionLog(
+            sessionID: UUID(), taskID: Self.taskAID,
+            startedAt: Date(timeIntervalSinceReferenceDate: 0),
+            endedAt: Date(timeIntervalSinceReferenceDate: .infinity),
+            focusedDuration: 1, pauseCount: 0, pausedDuration: 0,
+            focusRating: 4, energyRating: 4, taskCompleted: false, notes: nil)
+        guard
+            case .sessionArithmeticMismatch = DailyLogCodec.appendValidationFailure(
+                for: nonFinite)
+        else {
+            return XCTFail("a non-finite span must still fail validation")
+        }
+    }
+
     // MARK: - Concurrency (pinned strategy: actor-serialized read-modify-write)
 
     func testConcurrentAppendsLeaveExactlyNEntries() async throws {

@@ -19,7 +19,13 @@ import SwiftUI
 ///   app-shell branch swap.
 /// - `.logAppendFailed` — nothing was written; the ending state is retained
 ///   (the phase is untouched, the sheet stays up) and the failure is
-///   surfaced inline for retry.
+///   surfaced inline for retry. The modal is never a trap (issue #27): a
+///   destructive **Discard session log** control appears alongside the
+///   retry — typed confirm (confirmation dialog, destructive-styled button)
+///   drops the in-memory result (the documented honest §18 loss — the
+///   unsubmitted session exists only in memory, the snapshot was already
+///   cleared at confirm) and the phase moves to `.tasksView` with nothing
+///   written.
 /// - `.completionFailedAfterLog` — the documented partial outcome: the
 ///   session IS logged, the status is NOT updated; the app returns to Tasks,
 ///   where the user can complete the task manually in the UI.
@@ -34,6 +40,7 @@ struct EndOfSessionModalView: View {
 
     @State private var form = EndOfSessionFormState()
     @State private var submissionFailureText: String?
+    @State private var showsDiscardConfirmation = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: DesignTokens.spacingL) {
@@ -49,6 +56,27 @@ struct EndOfSessionModalView: View {
                     .fixedSize(horizontal: false, vertical: true)
             }
             HStack {
+                if submissionFailureText != nil {
+                    // The #27 escape hatch, offered alongside retry exactly
+                    // while the append failure is surfaced: destructive,
+                    // behind a typed confirmation (see `discard()`).
+                    Button("Discard session log…", role: .destructive) {
+                        showsDiscardConfirmation = true
+                    }
+                    .buttonStyle(.bordered)
+                    .confirmationDialog(
+                        "Discard this session's log?",
+                        isPresented: $showsDiscardConfirmation,
+                        titleVisibility: .visible
+                    ) {
+                        Button("Discard session log", role: .destructive, action: discard)
+                        Button("Keep editing", role: .cancel) {}
+                    } message: {
+                        Text(
+                            "The unsubmitted session exists only in memory — "
+                                + "discarding loses it permanently. Nothing is written to the vault.")
+                    }
+                }
                 Spacer()
                 Button("Save session", action: submit)
                     .buttonStyle(.borderedProminent)
@@ -170,5 +198,15 @@ struct EndOfSessionModalView: View {
                 submissionFailureText = String(describing: error)
             }
         }
+    }
+
+    /// The confirmed destructive action of the #27 escape hatch: drops the
+    /// in-memory result via `AppModel.discardEndOfSession()` — the honest
+    /// §18 loss (the unsubmitted session is the only copy; the snapshot was
+    /// already cleared at confirm) — and returns to Tasks. Nothing is
+    /// written to any log.
+    private func discard() {
+        submissionFailureText = nil
+        model.discardEndOfSession()
     }
 }

@@ -53,11 +53,42 @@ struct EndOfSessionFormState: Equatable, Sendable {
     // MARK: - Mapping form state → FocusSessionLog
 
     /// Composes the §13 log (issue #22 criterion 9, PRD §13) purely: the
-    /// seven timing fields come verbatim from the engine's
+    /// identity/timestamp fields come verbatim from the engine's
     /// `FocusSessionResult`, `task_completed` from the Yes/No answer, the
     /// ratings from the chosen levels, and `notes` from the free-text field
     /// — `nil` when trimmed-empty (the file omits the key, matching the #11
     /// optional-field convention).
+    ///
+    /// # Whole-minute reconciliation (issue #27, PINNED formula)
+    /// The three duration fields do NOT pass through verbatim: the engine's
+    /// independent nearest-minute rounding can drift the minute sum from the
+    /// wall-clock span (the #27 repro: 66 s span, focused 55 s → 1 min,
+    /// paused 11 s → 0 min — and 1 + 0 ≠ any whole-minute reading of 66 s
+    /// under #11's original exact-second check), which made the append
+    /// validation fail and trapped the modal. The composition reconciles so
+    /// the #11 append check passes for ANY session (with #27's amended
+    /// minute-granularity check, see `DailyLogCodec`):
+    ///
+    /// - `span_min = nearest((ended_at − started_at) / 60)` — from the
+    ///   WALL-CLOCK timestamps, i.e. exactly the span the #11 check reads;
+    /// - `paused_min = min(nearest(paused_seconds / 60), span_min)` — the
+    ///   engine's `pausedDuration` already IS `nearest(paused_seconds / 60)`
+    ///   (the #12 pinned rounding rule), so `min(result.pausedDuration,
+    ///   span_min)` implements this verbatim. The clamp is a no-op whenever
+    ///   the wall span ≥ the monotonic paused sum (always true absent a
+    ///   mid-session wall-clock change; #12 pins `ended_at − started_at` as
+    ///   the timestamp authority) and is what guarantees `focused_min ≥ 0`
+    ///   unconditionally;
+    /// - `focused_min = span_min − paused_min` — still excludes paused time
+    ///   in the rounded form (§13 semantics).
+    ///
+    /// **Documented drift bound:** reconciled `focused_min` can differ from
+    /// `nearest(focused_seconds / 60)` by at most 1 minute — the price of
+    /// the exact invariant (two independent nearest roundings can drift the
+    /// sum by ±1; reconciliation spends that ±1 on `focused_min` only).
+    /// Second-precision engine values are unchanged — the #12 engine keeps
+    /// returning honest whole-minute fields and is NOT touched here; the
+    /// reconciliation lives entirely in this composition layer.
     ///
     /// - Precondition: `isSubmittable`. The model re-checks it before
     ///   calling and the modal's submit button is enabled only on a complete
@@ -67,17 +98,29 @@ struct EndOfSessionFormState: Equatable, Sendable {
         precondition(
             isSubmittable, "makeLog requires a submittable end-of-session form")
         let trimmedNotes = notes.trimmingCharacters(in: .whitespacesAndNewlines)
+        // The #27 reconciliation (pinned formula, documented above).
+        let spanMinutes = Self.nearestMinute(
+            fromSeconds: result.endedAt.timeIntervalSince(result.startedAt))
+        let pausedMinutes = min(result.pausedDuration, spanMinutes)
+        let focusedMinutes = spanMinutes - pausedMinutes
         return FocusSessionLog(
             sessionID: result.sessionID,
             taskID: result.taskID,
             startedAt: result.startedAt,
             endedAt: result.endedAt,
-            focusedDuration: result.focusedDuration,
+            focusedDuration: focusedMinutes,
             pauseCount: result.pauseCount,
-            pausedDuration: result.pausedDuration,
+            pausedDuration: pausedMinutes,
             focusRating: focusRating ?? 0,
             energyRating: energyRating ?? 0,
             taskCompleted: completedChoice == .yes,
             notes: trimmedNotes.isEmpty ? nil : trimmedNotes)
+    }
+
+    /// Pinned nearest-minute rounding, half away from zero — the engine's
+    /// own #12 rounding rule, mirrored here so the composition derives
+    /// `span_min` from the wall-clock span with the exact same rule.
+    static func nearestMinute(fromSeconds seconds: TimeInterval) -> Int {
+        Int((seconds / 60).rounded(.toNearestOrAwayFromZero))
     }
 }

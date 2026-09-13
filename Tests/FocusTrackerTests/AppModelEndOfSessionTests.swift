@@ -359,6 +359,93 @@ final class AppModelEndOfSessionTests: XCTestCase {
         XCTAssertEqual(logged.taskCompleted, false)
     }
 
+    // MARK: - Issue #27 repro: sub-minute drift appends and parses back
+
+    func testReproSubMinuteDriftAppendsWithReconciledMinutes() async throws {
+        let taskID = UUID()
+        try writeTaskFile("Drift task", id: taskID, in: vaultURL)
+        let model = await makeConfiguredModel()
+        _ = try await startRunningSession(on: model, taskID: taskID)
+        // The user-reported repro: 55 s focus, 11 s pause → a 66 s span.
+        clock.advance(by: 55)
+        try model.pauseSession()
+        clock.advance(by: 11)
+        try model.resumeSession()
+        let result = try model.endSession()
+        XCTAssertEqual(result.focusedDuration, 1, "nearest(55/60), half away from zero")
+        XCTAssertEqual(result.pausedDuration, 0, "nearest(11/60)")
+
+        // Under #11's original exact-second append check this submission
+        // failed and trapped the modal; with #27's reconciliation + amended
+        // granularity it appends successfully.
+        let outcome = try await model.submitEndOfSession(makeForm(completed: .no))
+        XCTAssertEqual(outcome, .success)
+        XCTAssertEqual(model.appPhase, .postSessionChoice(completionFailure: nil))
+
+        // Parse-back: focused 1 / paused 0.
+        let logged = try await parseBackSession(result)
+        XCTAssertEqual(logged.focusedDuration, 1)
+        XCTAssertEqual(logged.pausedDuration, 0)
+    }
+
+    // MARK: - Issue #27 escape hatch: discard the unsubmitted session
+
+    func testDiscardDropsEndingStateAndWritesNothing() async throws {
+        let taskID = UUID()
+        try writeTaskFile("Discard task", id: taskID, in: vaultURL)
+        let model = await makeConfiguredModel()
+        let (result, context) = try await runSessionToEnd(on: model, taskID: taskID)
+        XCTAssertEqual(model.appPhase, .endingSession(result, context))
+
+        model.discardEndOfSession()
+
+        XCTAssertEqual(model.appPhase, .tasksView)
+        XCTAssertFalse(model.isSessionActive)
+        // Nothing appended to any log: the end-day file holds no session.
+        let store = DailyLogStore(vaultURL: vaultURL)
+        let day = try await store.readDay(for: AppModel.logDay(forEndedAt: result.endedAt))
+        XCTAssertTrue(day.sessions.isEmpty, "nothing was written on discard")
+        // The snapshot stays cleared: still none on disk.
+        let snapshot = try FileActiveSessionPersistence(directory: persistenceDirectory)
+            .load()
+        XCTAssertNil(snapshot)
+    }
+
+    func testDiscardAfterAppendFailureEscapesTheTrappedModal() async throws {
+        let taskID = UUID()
+        try writeTaskFile("Trap task", id: taskID, in: vaultURL)
+        let model = await makeConfiguredModel()
+        let (result, context) = try await runSessionToEnd(on: model, taskID: taskID)
+
+        // Inject the deterministic append failure (the retry test's seam):
+        // `Logs/` becomes a regular file, so the append can never succeed.
+        let logsDirectory = vaultURL.appendingPathComponent("Logs", isDirectory: true)
+        try FileManager.default.removeItem(at: logsDirectory)
+        let logsPath = vaultURL.appendingPathComponent("Logs", isDirectory: false)
+        let obstruction = Data("not a directory".utf8)
+        try obstruction.write(to: logsPath)
+
+        let outcome = try await model.submitEndOfSession(makeForm(completed: .no))
+        guard case .logAppendFailed = outcome else {
+            return XCTFail("expected .logAppendFailed, got \(String(describing: outcome))")
+        }
+        XCTAssertEqual(model.appPhase, .endingSession(result, context), "trapped")
+
+        // The escape hatch: the confirmed discard drops the result, writes
+        // nothing, and returns to Tasks.
+        model.discardEndOfSession()
+        XCTAssertEqual(model.appPhase, .tasksView)
+        XCTAssertFalse(model.isSessionActive)
+        // Nothing was written — the obstruction is untouched.
+        XCTAssertEqual(try Data(contentsOf: logsPath), obstruction)
+    }
+
+    func testDiscardOutsideEndingPhaseIsTypedNoOp() async throws {
+        let model = await makeConfiguredModel()
+        model.discardEndOfSession()
+        XCTAssertEqual(model.appPhase, .tasksView, "untouched outside .endingSession")
+    }
+
     // MARK: - Completion failure after a successful log (typed partial outcome)
 
     func testCompletionFailureAfterLogIsTypedPartialOutcome() async throws {

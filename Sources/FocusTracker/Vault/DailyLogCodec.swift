@@ -360,16 +360,40 @@ extension DailyLogCodec {
 // MARK: - Appending arithmetic validation (enforced on append only)
 
 extension DailyLogCodec {
-    /// The append-time arithmetic check for a session (pinned decision):
-    /// `ended_at − started_at` must exactly equal
-    /// `focused_duration + paused_duration` minutes. Timestamps are
-    /// second-precision, so the span must be exactly that many seconds — a
-    /// caller passing sub-second `Date`s fails validation rather than being
-    /// silently truncated. Returns the typed failure, or nil when consistent.
-    /// (Reading never runs this — hand-edited files still load.)
+    /// The append-time arithmetic check for a session (pinned decision, as
+    /// amended by issue #27): `ended_at − started_at` must equal
+    /// `focused_duration + paused_duration` at the duration fields'
+    /// whole-minute granularity — `nearest(exactSpanSeconds / 60) ==
+    /// focused_duration + paused_duration`, nearest = half away from zero
+    /// (the #12 engine's own rounding rule).
+    ///
+    /// # Issue #27's deliberate divergence from #11's original exact-second
+    /// wording (documented)
+    /// The duration fields are whole minutes, so the check is meaningful
+    /// only at that granularity: the original
+    /// `spanSeconds == (focused + paused) * 60` form could only ever pass
+    /// for whole-minute-aligned spans — for any other span NO whole-minute
+    /// log satisfies it (66 ≠ 60·k for any k, reconciled or not), which is
+    /// the trap's root cause. Accepted consequence: spans within ±30 s of
+    /// the minute sum pass (documented tolerance). The check still catches
+    /// real corruption — a minute sum off by ≥ 1 minute from the span (a
+    /// 3600 s span vs a 61-minute sum) still fails. The FILE FORMAT is
+    /// untouched: fixtures byte-identical, parse behavior unchanged, and
+    /// reading never enforces this check (hand-edited files still load).
+    /// Non-finite spans (`exactSpanSeconds` → 0) and negative spans still
+    /// fail against any non-negative minute sum, unchanged.
+    ///
+    /// Timestamps are second-precision; `exactSpanSeconds` itself is
+    /// unchanged. (Reading never runs this — hand-edited files still load.)
     static func appendValidationFailure(for session: FocusSessionLog) -> DailyLogError? {
         let spanSeconds = exactSpanSeconds(from: session.startedAt, to: session.endedAt)
-        guard spanSeconds == (session.focusedDuration + session.pausedDuration) * 60 else {
+        // Issue #27 amendment: ONE check, changed from
+        // `spanSeconds == (focused + paused) * 60` to the minute-granularity
+        // comparison documented above. Nothing else about this check changed.
+        guard
+            nearestMinute(spanSeconds)
+                == session.focusedDuration + session.pausedDuration
+        else {
             return .sessionArithmeticMismatch(
                 sessionID: session.sessionID,
                 startedAt: DailyLogDay.timestampString(from: session.startedAt),
@@ -379,6 +403,15 @@ extension DailyLogCodec {
                 spanSeconds: spanSeconds)
         }
         return nil
+    }
+
+    /// Whole-minute nearest rounding (half away from zero, the #12 engine
+    /// rule) of an exact second count — the granularity of the #27 session
+    /// amendment. The break check below stays exact (#27 changes only this
+    /// session check; the break engine reconciles `ended_at` to
+    /// `started_at + duration` minutes, so breaks are always minute-aligned).
+    private static func nearestMinute(_ seconds: Int) -> Int {
+        Int((Double(seconds) / 60).rounded(.toNearestOrAwayFromZero))
     }
 
     /// The append-time arithmetic check for a break:

@@ -48,7 +48,21 @@ struct FocusTrackerApp: App {
                     // exists exactly while the phase is `.endingSession`
                     // (submission flips the phase; the sheet leaves with
                     // the branch), and interactive dismissal is disabled —
-                    // submission is REQUIRED (§12.5).
+                    // submission is REQUIRED (§12.5). Issue #27: the modal
+                    // now also offers Discard (typed confirm) after a
+                    // failed append, so it can never trap.
+                    //
+                    // Quit is NOT blocked while this modal is up (#27,
+                    // verified): there is no `NSApplicationDelegate` and no
+                    // `applicationShouldTerminate` anywhere in the app (the
+                    // only AppKit surface is the #21 mini panel, which adds
+                    // none), and this is a plain SwiftUI sheet — AppKit's
+                    // default terminate path ends the app normally on
+                    // Cmd+Q / app-menu Quit with the sheet showing. No
+                    // quit-confirmation dialog is added; quitting may lose
+                    // the unsubmitted session (the documented §18
+                    // honest-loss window on `.endingSession`) — the
+                    // criterion is only that quitting is not BLOCKED.
                     TimerView(context: context, model: model)
                         .sheet(isPresented: .constant(true)) {
                             EndOfSessionModalView(
