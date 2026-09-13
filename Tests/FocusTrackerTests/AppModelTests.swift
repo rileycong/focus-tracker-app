@@ -243,8 +243,16 @@ final class AppModelTests: XCTestCase {
         XCTAssertEqual(model.sessionState, .running)
         XCTAssertTrue(model.isSessionActive)
 
-        // The refusal is temporary: after the session ends the change goes through.
+        // The refusal is temporary: after the end flow completes (the
+        // required #22 modal submitted, ending state cleared) the change
+        // goes through.
         _ = try model.endSession()
+        var form = EndOfSessionFormState()
+        form.completedChoice = .no
+        form.focusRating = 3
+        form.energyRating = 3
+        let submission = try await model.submitEndOfSession(form)
+        XCTAssertEqual(submission, .success)
         let lateOutcome = await model.setVaultPath(to: vaultB)
         XCTAssertEqual(lateOutcome, .changed)
         XCTAssertEqual(model.tasks.map(\.title), ["Beta task"])

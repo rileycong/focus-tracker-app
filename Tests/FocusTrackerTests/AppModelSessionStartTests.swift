@@ -390,7 +390,9 @@ final class AppModelSessionStartTests: XCTestCase {
         XCTAssertEqual(model.appPhase, .timerView(context))
         let result = try model.endSession()
         XCTAssertEqual(result.taskID, context.taskID)
-        XCTAssertEqual(model.appPhase, .tasksView, "end returns to the tasks view")
+        XCTAssertEqual(
+            model.appPhase, .endingSession(result, context),
+            "end enters the #22 required ending phase")
     }
 
     func testAdHocSessionValidationRefusalsAreTyped() async throws {
@@ -513,7 +515,9 @@ final class AppModelSessionStartTests: XCTestCase {
 
     // MARK: - App phase round trip
 
-    func testEndSessionSwapsAppPhaseBackToTasksView() async throws {
+    func testEndSessionEntersEndingPhaseAndSubmissionReturnsToTasksView()
+        async throws
+    {
         let taskID = UUID()
         try writeTaskFile("Phase task", id: taskID, status: .toDo, in: vaultURL)
         let model = await makeConfiguredModel()
@@ -522,8 +526,18 @@ final class AppModelSessionStartTests: XCTestCase {
         let context = try requireStarted(try await model.startSession(taskID: taskID))
         XCTAssertEqual(model.appPhase, .timerView(context))
 
-        _ = try model.endSession()
-        XCTAssertEqual(model.appPhase, .tasksView)
+        // Confirm: the phase holds the result + context until submission.
+        let result = try model.endSession()
+        XCTAssertEqual(model.appPhase, .endingSession(result, context))
         XCTAssertEqual(model.sessionState, .idle)
+
+        // Submission (§12.5) is what returns the app to Tasks.
+        var form = EndOfSessionFormState()
+        form.completedChoice = .no
+        form.focusRating = 3
+        form.energyRating = 3
+        let outcome = try await model.submitEndOfSession(form)
+        XCTAssertEqual(outcome, .success)
+        XCTAssertEqual(model.appPhase, .tasksView)
     }
 }

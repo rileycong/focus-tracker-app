@@ -24,9 +24,11 @@ struct FocusTrackerApp: App {
 
     var body: some Scene {
         WindowGroup {
-            // The app-phase swap (issue #19, PRD §20.3): the start flow moves
-            // the app to the full-screen timer view (issue #20 — the #19
-            // placeholder was deleted); ending it returns to the Tasks view.
+            // The app-phase swap (issue #19, PRD §20.3; end flow issue #22):
+            // the start flow moves the app to the full-screen timer view
+            // (issue #20); confirming End moves it to `.endingSession` — the
+            // timer stays rendered with the blocking end-of-session modal
+            // over it — and the required submission returns to Tasks.
             // The `.task` bootstrap runs once per window — the phase swap
             // replaces the content, not the window identity.
             Group {
@@ -35,13 +37,27 @@ struct FocusTrackerApp: App {
                     TasksView(model: model)
                 case .timerView(let context):
                     TimerView(context: context, model: model)
+                case .endingSession(let result, let context):
+                    // The end-of-session modal (issue #22, PRD §12): ONE
+                    // presentation path, driven by the phase right here in
+                    // the app shell — never duplicated per view. The sheet
+                    // exists exactly while the phase is `.endingSession`
+                    // (submission flips the phase; the sheet leaves with
+                    // the branch), and interactive dismissal is disabled —
+                    // submission is REQUIRED (§12.5).
+                    TimerView(context: context, model: model)
+                        .sheet(isPresented: .constant(true)) {
+                            EndOfSessionModalView(
+                                result: result, context: context, model: model)
+                                .interactiveDismissDisabled(true)
+                        }
                 }
             }
             .task { await model.bootstrap() }
             // The mini-panel ↔ main-window sync (issue #21): fires on a
             // collapse (`isMiniTimerActive` flip while the phase stays
             // `.timerView`), on a restore (flag off), and on any end path
-            // (phase → `.tasksView`, flag already cleared by
+            // (phase → `.endingSession`, flag already cleared by
             // `endSession()`).
             .onChange(of: model.appPhase) { _, _ in syncMiniPanel() }
             .onChange(of: model.isMiniTimerActive) { _, _ in syncMiniPanel() }
@@ -60,11 +76,12 @@ struct FocusTrackerApp: App {
     /// - **Restore** (`.timerView`, flag off): dismiss the panel and orderFront
     ///   the main window — the full `.timerView(context)` display is intact
     ///   (the phase never left `.timerView`, so no content was torn down).
-    /// - **Any end path** (`.tasksView`): dismiss the panel and bring the
-    ///   main window back on Tasks — covers End-from-mini (the window was
-    ///   hidden) and End-from-full (already visible; the extra orderFront is
-    ///   a harmless no-op). #22's future end flow funnels through the same
-    ///   `endSession()` and lands here too.
+    /// - **Any end path** (`.endingSession` while the required modal is up,
+    ///   then `.tasksView` after submission): dismiss the panel and bring
+    ///   the main window back — covers End-from-mini (the window was
+    ///   hidden; the restored main window shows the timer with the #22
+    ///   modal over it) and End-from-full (already visible; the extra
+    ///   orderFront is a harmless no-op).
     ///
     /// No persistence of mini state: the app quitting takes the panel with
     /// it, and a relaunch starts on the full view (`isMiniTimerActive` is

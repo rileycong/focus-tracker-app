@@ -81,9 +81,10 @@ final class MiniTimerPanelLayoutTests: XCTestCase {
 /// `AppModel` mini-mode transitions (issue #21 criteria 3–4): collapse ↔
 /// restore while a session is running — the session state untouched and the
 /// phase consistent (`.timerView`) both ways — and the end-from-mini path
-/// (endSession → idle + `.tasksView` + mini state cleared). Temp-dir fixture
-/// copy per the established pattern; the FakeClock starts at monotonic 0 so
-/// the "session untouched" asserts are exact.
+/// (endSession → idle + the #22 `.endingSession` phase + mini state
+/// cleared). Temp-dir fixture copy per the established pattern; the
+/// FakeClock starts at monotonic 0 so the "session untouched" asserts are
+/// exact.
 @MainActor
 final class AppModelMiniTimerTests: XCTestCase {
 
@@ -180,6 +181,18 @@ final class AppModelMiniTimerTests: XCTestCase {
     }
 
     private struct TestFailure: Error {}
+
+    /// Resolves the #22 `.endingSession` phase left open by `endSession()`
+    /// (a No answer, no notes) so a next session can start (§12.5).
+    private func submitEndingForm(on model: AppModel) async throws {
+        var form = EndOfSessionFormState()
+        form.completedChoice = .no
+        form.focusRating = 3
+        form.energyRating = 3
+        let outcome = try await model.submitEndOfSession(form)
+        XCTAssertEqual(outcome, .success)
+        XCTAssertEqual(model.appPhase, .tasksView)
+    }
 
     // MARK: - Collapse while running (issue #21 criterion 3)
 
@@ -286,22 +299,25 @@ final class AppModelMiniTimerTests: XCTestCase {
         XCTAssertEqual(model.sessionState, .running, "session untouched")
     }
 
-    // MARK: - End from mini (issue #21 criterion 4)
+    // MARK: - End from mini (issue #21 criterion 4 + #22 end flow)
 
-    func testEndFromMiniClearsMiniStateReturnsToTasksAndIdle() async throws {
+    func testEndFromMiniClearsMiniStateEntersEndingPhaseAndGoesIdle() async throws {
         let taskID = UUID()
         try writeTaskFile("Alpha task", id: taskID)
         let model = await makeConfiguredModel()
-        _ = try await startRunningSession(on: model, taskID: taskID)
+        let context = try await startRunningSession(on: model, taskID: taskID)
         model.recordSessionNumberToday(3)
         model.collapseToMiniTimer()
         XCTAssertTrue(model.isMiniTimerActive)
 
-        _ = try model.endSession()
+        let result = try model.endSession()
 
         XCTAssertEqual(model.sessionState, .idle)
         XCTAssertFalse(model.isSessionActive)
-        XCTAssertEqual(model.appPhase, .tasksView, "main window reappears on Tasks")
+        // #22: the confirm enters the REQUIRED `.endingSession` phase (the
+        // modal over the restored main window) — not a direct return to
+        // Tasks — holding the result plus the session context.
+        XCTAssertEqual(model.appPhase, .endingSession(result, context))
         XCTAssertTrue(model.isMiniTimerActive == false, "mini cleared")
         XCTAssertNil(model.sessionNumberToday, "stale snapshot cleared")
         // The on-disk active-session snapshot was cleared by the end.
@@ -314,16 +330,16 @@ final class AppModelMiniTimerTests: XCTestCase {
         let taskID = UUID()
         try writeTaskFile("Alpha task", id: taskID)
         let model = await makeConfiguredModel()
-        _ = try await startRunningSession(on: model, taskID: taskID)
+        let context = try await startRunningSession(on: model, taskID: taskID)
 
         // Collapse → restore → end from the full view: the flag (already
-        // off) stays off and the phase still lands on Tasks.
+        // off) stays off and the phase lands on the #22 ending state.
         model.collapseToMiniTimer()
         model.restoreFromMiniTimer()
-        _ = try model.endSession()
+        let result = try model.endSession()
 
         XCTAssertFalse(model.isMiniTimerActive)
-        XCTAssertEqual(model.appPhase, .tasksView)
+        XCTAssertEqual(model.appPhase, .endingSession(result, context))
         XCTAssertEqual(model.sessionState, .idle)
     }
 
@@ -344,9 +360,11 @@ final class AppModelMiniTimerTests: XCTestCase {
         XCTAssertEqual(model.sessionNumberToday, 4)
 
         // Ending clears it; session 2 starts unrecorded again (a fresh
-        // fetch, never a stale number).
+        // fetch, never a stale number). The required #22 wrap-up is
+        // submitted between the two sessions (§12.5).
         _ = try model.endSession()
         XCTAssertNil(model.sessionNumberToday)
+        try await submitEndingForm(on: model)
 
         _ = try await startRunningSession(on: model, taskID: secondTask)
         XCTAssertNil(model.sessionNumberToday, "new session re-fetches")

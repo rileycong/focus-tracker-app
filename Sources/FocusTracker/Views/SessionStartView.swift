@@ -408,6 +408,9 @@ struct SessionStartView: View {
         switch refusal {
         case .sessionAlreadyActive:
             return "A session is already running."
+        case .sessionEndingUnresolved:
+            return
+                "A session just ended — finish the wrap-up form before starting a new one."
         case .vaultNotConfigured:
             return "No vault is configured. Choose a vault folder first."
         case .pendingRecoveryUnresolved:

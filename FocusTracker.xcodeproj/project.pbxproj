@@ -22,6 +22,7 @@
 		2F61C905039BEBA16715711A /* MiniTimerPanelController.swift in Sources */ = {isa = PBXBuildFile; fileRef = D335BCE52B9EEF442F53641B /* MiniTimerPanelController.swift */; };
 		32B8B1F2B438D38E619C2B2E /* TimerDisplay.swift in Sources */ = {isa = PBXBuildFile; fileRef = 97B40F0E34CCC987921482F9 /* TimerDisplay.swift */; };
 		335FFAE1E20D5816ACF0D335 /* FrontmatterSplitter.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9E370EA1340964AFF7C24132 /* FrontmatterSplitter.swift */; };
+		36AA785F718AEE079885A7CE /* AppModelEndOfSessionTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B015AD3C715AB5F42EB44E61 /* AppModelEndOfSessionTests.swift */; };
 		3A9B3456961A1A40FDFFF2DF /* SubtaskRowView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 23D3CA44358D0A95F097A01B /* SubtaskRowView.swift */; };
 		3D0BD19FB6B7D674DA97EB7D /* BreakLog.swift in Sources */ = {isa = PBXBuildFile; fileRef = DC84AC2DC56876A49D1A4261 /* BreakLog.swift */; };
 		443D3CE32D51A6DF3ADCDBA3 /* FrontmatterEncoder.swift in Sources */ = {isa = PBXBuildFile; fileRef = 496B467448E0EBB4F9699080 /* FrontmatterEncoder.swift */; };
@@ -29,10 +30,12 @@
 		47700B03189E62AD8177D88E /* TaskFormStateTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C636366981320C04C59B9646 /* TaskFormStateTests.swift */; };
 		47F742470901C6A5A3941939 /* FocusTrackerApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 248E5131297EB06C2E76BC68 /* FocusTrackerApp.swift */; };
 		4866585A7AACB6576688B9BF /* TaskOrderingTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 95709B12E9BA98C14EF8CEAB /* TaskOrderingTests.swift */; };
+		4A6D67334A0E9AC55CBF51E8 /* EndOfSessionFormState.swift in Sources */ = {isa = PBXBuildFile; fileRef = BD9179D2909498220C214EE0 /* EndOfSessionFormState.swift */; };
 		4CA8116552D030F08BFE1FC9 /* TimerDisplayTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = DD420083F379F54961F244ED /* TimerDisplayTests.swift */; };
 		4CE0485DD586E39C8634CEB9 /* MiniTimerView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 33016951FE75D4AE77E4F634 /* MiniTimerView.swift */; };
 		4DD7512AF2018D0642E67299 /* TaskFormState.swift in Sources */ = {isa = PBXBuildFile; fileRef = 445B3D8CCF237E3DFFE44208 /* TaskFormState.swift */; };
 		4FF4F95E61A2D0A30B225E88 /* MiniTimerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0EE256B8BBE3676D2BA48CB /* MiniTimerTests.swift */; };
+		526C5979196E37C7A4B9B643 /* EndOfSessionModalView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1C7D4063FA213B49650F1094 /* EndOfSessionModalView.swift */; };
 		569C45089FE89BFDF1A583D4 /* DesignTokens.swift in Sources */ = {isa = PBXBuildFile; fileRef = FE058807A3A55E2F22555654 /* DesignTokens.swift */; };
 		56F3C426421E25178C5ADC15 /* DailyLogError.swift in Sources */ = {isa = PBXBuildFile; fileRef = F15748CCF586FA0EDEE2F61F /* DailyLogError.swift */; };
 		5811C92D98367DEC729F7EA1 /* VaultStoreTransitionTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B0C967C88404484608223706 /* VaultStoreTransitionTests.swift */; };
@@ -92,6 +95,7 @@
 		F8D548D3A1E6FE56E6A38A7C /* ActiveSessionRecovery.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6B9823987C7DB9B22004C48A /* ActiveSessionRecovery.swift */; };
 		F9A45B20373B4F1164258AE6 /* ActiveSessionPersistenceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AF4D3CFB0FB6AD76903E3A3E /* ActiveSessionPersistenceTests.swift */; };
 		FA85D7377CBF918F7941F4ED /* ActiveSessionPersistence.swift in Sources */ = {isa = PBXBuildFile; fileRef = 173E587312DA52F8A9B8EA05 /* ActiveSessionPersistence.swift */; };
+		FADA71C8EDB65FD2DC6E5FDF /* EndOfSessionFormStateTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8BF05EF77B0C31CF49C81DE8 /* EndOfSessionFormStateTests.swift */; };
 		FB83696C4D6A3A0A58D84EB1 /* Project.swift in Sources */ = {isa = PBXBuildFile; fileRef = E0CE5BEA0D95F2D356A98AB3 /* Project.swift */; };
 /* End PBXBuildFile section */
 
@@ -114,6 +118,7 @@
 		15686F80AD41E2A1D4F5639B /* SubtaskFormState.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SubtaskFormState.swift; sourceTree = "<group>"; };
 		173E587312DA52F8A9B8EA05 /* ActiveSessionPersistence.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ActiveSessionPersistence.swift; sourceTree = "<group>"; };
 		19168751BF453E16196AF15C /* FocusTrackerTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = FocusTrackerTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		1C7D4063FA213B49650F1094 /* EndOfSessionModalView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EndOfSessionModalView.swift; sourceTree = "<group>"; };
 		1CAECA9BDEFA889C6DE2EBE9 /* FrontmatterDecoder.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FrontmatterDecoder.swift; sourceTree = "<group>"; };
 		1E40706EE3BCB1DD382F1F49 /* FocusTracker.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = FocusTracker.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		1F9EDB5DBAD2343FC717D44B /* TaskFormView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TaskFormView.swift; sourceTree = "<group>"; };
@@ -151,6 +156,7 @@
 		7E223517EDAFBC6628F2E5D6 /* TaskOrdering.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TaskOrdering.swift; sourceTree = "<group>"; };
 		83BAB9738132D14FCB11FF2C /* TasksGroupingTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TasksGroupingTests.swift; sourceTree = "<group>"; };
 		84025FD8E3B25790B7D988C9 /* VaultStoreStatusTransitions.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VaultStoreStatusTransitions.swift; sourceTree = "<group>"; };
+		8BF05EF77B0C31CF49C81DE8 /* EndOfSessionFormStateTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EndOfSessionFormStateTests.swift; sourceTree = "<group>"; };
 		8DB32A9A07026DDD5641F273 /* AppModelTaskWriteTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppModelTaskWriteTests.swift; sourceTree = "<group>"; };
 		95709B12E9BA98C14EF8CEAB /* TaskOrderingTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TaskOrderingTests.swift; sourceTree = "<group>"; };
 		97B40F0E34CCC987921482F9 /* TimerDisplay.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TimerDisplay.swift; sourceTree = "<group>"; };
@@ -161,11 +167,13 @@
 		ACB88CC89F0C4E13A30792F1 /* RowDropDelegate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RowDropDelegate.swift; sourceTree = "<group>"; };
 		AEA22B891260224B50F53902 /* TaskEnums.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TaskEnums.swift; sourceTree = "<group>"; };
 		AF4D3CFB0FB6AD76903E3A3E /* ActiveSessionPersistenceTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ActiveSessionPersistenceTests.swift; sourceTree = "<group>"; };
+		B015AD3C715AB5F42EB44E61 /* AppModelEndOfSessionTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppModelEndOfSessionTests.swift; sourceTree = "<group>"; };
 		B0C967C88404484608223706 /* VaultStoreTransitionTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VaultStoreTransitionTests.swift; sourceTree = "<group>"; };
 		B67859164CAD39CDD96B1736 /* DailyLogStoreTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DailyLogStoreTests.swift; sourceTree = "<group>"; };
 		B742C07982F82625A0329387 /* AppSettingsTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppSettingsTests.swift; sourceTree = "<group>"; };
 		B9249EF02B6E6EC374001EB0 /* ReorderArithmetic.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReorderArithmetic.swift; sourceTree = "<group>"; };
 		BCE466B78BD1A66F6A5A44BD /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
+		BD9179D2909498220C214EE0 /* EndOfSessionFormState.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EndOfSessionFormState.swift; sourceTree = "<group>"; };
 		BDF05E8048A2CA4C67790C50 /* Category.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Category.swift; sourceTree = "<group>"; };
 		C0E0903987EB31A0547484E3 /* DailyLogStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DailyLogStore.swift; sourceTree = "<group>"; };
 		C0EE256B8BBE3676D2BA48CB /* MiniTimerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MiniTimerTests.swift; sourceTree = "<group>"; };
@@ -243,6 +251,8 @@
 			children = (
 				554340F5DF6E15C777FD9264 /* CollapseStateStore.swift */,
 				FE058807A3A55E2F22555654 /* DesignTokens.swift */,
+				BD9179D2909498220C214EE0 /* EndOfSessionFormState.swift */,
+				1C7D4063FA213B49650F1094 /* EndOfSessionModalView.swift */,
 				09F3B221E5E24A84E3AD2F8D /* FormDeadline.swift */,
 				33016951FE75D4AE77E4F634 /* MiniTimerView.swift */,
 				B9249EF02B6E6EC374001EB0 /* ReorderArithmetic.swift */,
@@ -315,6 +325,7 @@
 				AF4D3CFB0FB6AD76903E3A3E /* ActiveSessionPersistenceTests.swift */,
 				03FB6108495185556CD5DC37 /* ActiveSessionRecoveryTests.swift */,
 				DA111D2587D7B0D7C3C5C401 /* ActiveSessionSnapshotTests.swift */,
+				B015AD3C715AB5F42EB44E61 /* AppModelEndOfSessionTests.swift */,
 				681606B16406FD9CC58C5181 /* AppModelReorderTests.swift */,
 				249524565EF81FA11176ADB8 /* AppModelSessionStartTests.swift */,
 				07D6524661D2133A7F8C1AAA /* AppModelSubtaskTests.swift */,
@@ -324,6 +335,7 @@
 				DDB02A5B746D6AFFE94F389F /* AtomicFileWriterTests.swift */,
 				6BD9E9056155C2B82893EDA6 /* DailyLogCodecTests.swift */,
 				B67859164CAD39CDD96B1736 /* DailyLogStoreTests.swift */,
+				8BF05EF77B0C31CF49C81DE8 /* EndOfSessionFormStateTests.swift */,
 				24A3DA2388BD777EAF1836D5 /* FocusSessionEngineRestoreTests.swift */,
 				ED156E35E718B893DF3B1E29 /* FocusSessionEngineTests.swift */,
 				4D5486D7E5950BEA4B04343F /* FrontmatterCodecTests.swift */,
@@ -479,6 +491,7 @@
 				F9A45B20373B4F1164258AE6 /* ActiveSessionPersistenceTests.swift in Sources */,
 				D48CA988670FBA3F970806BA /* ActiveSessionRecoveryTests.swift in Sources */,
 				A047718B0F86A825C8AFCC25 /* ActiveSessionSnapshotTests.swift in Sources */,
+				36AA785F718AEE079885A7CE /* AppModelEndOfSessionTests.swift in Sources */,
 				2E5C41BE3B9D53099472C195 /* AppModelReorderTests.swift in Sources */,
 				B433D6B457362EA7A919B673 /* AppModelSessionStartTests.swift in Sources */,
 				6B7E9E6EDE238B93D4BBE113 /* AppModelSubtaskTests.swift in Sources */,
@@ -488,6 +501,7 @@
 				A2DCE257E978CD6BAFAE2168 /* AtomicFileWriterTests.swift in Sources */,
 				A1E505587320816E1751A947 /* DailyLogCodecTests.swift in Sources */,
 				60C1AF42B5D52D3E66DD88D3 /* DailyLogStoreTests.swift in Sources */,
+				FADA71C8EDB65FD2DC6E5FDF /* EndOfSessionFormStateTests.swift in Sources */,
 				A2D29C602F9E8EA203B7F195 /* FocusSessionEngineRestoreTests.swift in Sources */,
 				64A3DACB834DD689B2881F95 /* FocusSessionEngineTests.swift in Sources */,
 				13CF5781F461AD63F5372CA9 /* FrontmatterCodecTests.swift in Sources */,
@@ -530,6 +544,8 @@
 				9469583BB0418CD9B069045C /* DailyLogStore.swift in Sources */,
 				2C75A6F305AE89450722FF81 /* DeadlineDay.swift in Sources */,
 				569C45089FE89BFDF1A583D4 /* DesignTokens.swift in Sources */,
+				4A6D67334A0E9AC55CBF51E8 /* EndOfSessionFormState.swift in Sources */,
+				526C5979196E37C7A4B9B643 /* EndOfSessionModalView.swift in Sources */,
 				AA7EAE384FB2648424CDEEE6 /* FocusSessionEngine.swift in Sources */,
 				080247AB874C28B56D0928F1 /* FocusSessionLog.swift in Sources */,
 				47F742470901C6A5A3941939 /* FocusTrackerApp.swift in Sources */,

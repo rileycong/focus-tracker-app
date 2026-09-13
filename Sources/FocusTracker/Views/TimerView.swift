@@ -16,13 +16,15 @@ import SwiftUI
 /// drives the always-on-top mini panel (`MiniTimerPanelController` +
 /// `MiniTimerView`) and is absent from no other state.
 ///
-/// # Temporary End path (carried over from the deleted #19 placeholder)
-/// Nothing is logged or classified here — the end-of-session flow is #22.
-/// The End Session control opens a minimal End/Cancel confirm and, on
-/// confirm, calls `AppModel.endSession()` and returns to `.tasksView` **with
-/// the `FocusSessionResult` discarded** — no `Logs/` append and no log path
-/// invented that #22 would have to undo. #22 replaces this with the
-/// end-of-session modal + logging (marked inline at the confirm handler).
+/// # End flow (issue #22, PRD §9.5, §12)
+/// The End Session control opens the minimal End/Cancel confirm (§9.5).
+/// Cancel continues the session: no end, no modal. Confirming runs the
+/// model's end flow — `AppModel.endSession()` ends the engine, retains the
+/// `FocusSessionResult` and swaps the phase to `.endingSession` — which
+/// opens the end-of-session modal over this timer. The modal is presented
+/// by the app shell (the ONE phase-driven presentation path; this view
+/// hosts no modal of its own), and only the required submission returns
+/// the app to Tasks.
 ///
 /// # Session number today (pinned semantics, issue #20 criterion 1; lifted
 /// by #21)
@@ -60,8 +62,8 @@ import SwiftUI
 /// screen calm (PRD §21).
 ///
 /// The `SessionTimerPlaceholderView` this replaces was **deleted** (its
-/// temporary-End rationale moved here verbatim); the real file is the honest
-/// home and a reduced stub would only be a second thing to remove in #22.
+/// rationale was absorbed into the sections above); the real file is the
+/// honest home and a reduced stub would only be a second thing to maintain.
 struct TimerView: View {
     /// The running session's display context (resolved at start, issue #19).
     let context: AppModel.SessionContext
@@ -106,9 +108,19 @@ struct TimerView: View {
             Button("End Session", role: .destructive, action: endSession)
             Button("Cancel", role: .cancel) {}
         } message: {
-            Text("The session ends and the app returns to the tasks.")
+            Text(
+                "The session ends now. A short wrap-up form opens before the app returns to the tasks."
+            )
         }
-        .task { await loadSessionNumber() }
+        .task {
+            // Under `.endingSession` (#22) this timer renders fresh beneath
+            // the blocking modal; the session-number fetch is a
+            // live-session concern (the snapshot was cleared at confirm) —
+            // no refetch while the ending flow drives.
+            if model.isSessionActive {
+                await loadSessionNumber()
+            }
+        }
     }
 
     // MARK: - Pieces (PRD §10.1 content, in order)
@@ -260,12 +272,13 @@ struct TimerView: View {
         }
     }
 
-    /// The **temporary** end path (issue #20 criterion 5 — #22 replaces it):
-    /// confirm calls `AppModel.endSession()` and returns to `.tasksView`
-    /// WITHOUT logging anything. The `FocusSessionResult` is discarded
-    /// exactly as the deleted #19 placeholder documented — no log path is
-    /// invented that #22 would have to undo. #22 replaces this with the
-    /// end-of-session modal + logging.
+    /// The confirm-End handler (issue #22): the same `AppModel` path the
+    /// mini panel's End control calls. Ends the engine, retains the result
+    /// and enters `.endingSession` — the app shell presents the
+    /// end-of-session modal over this timer; submission returns to Tasks.
+    /// The engine refuses a second end by contract; that cannot arise from
+    /// the confirm (it exists only on the active-session timer), so the
+    /// typed refusal is dropped here (not a user decision — house style).
     private func endSession() {
         guard model.isSessionActive else { return }
         _ = try? model.endSession()

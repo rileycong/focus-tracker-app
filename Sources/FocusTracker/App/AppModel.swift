@@ -76,6 +76,26 @@ import Observation
 /// Nothing is persisted: on relaunch the app defaults to the full view (the
 /// #14 recovery flow resurfaces a pending session there).
 ///
+/// # End of session (issue #22, PRD §9.5, §12, §13, §6.5, §20.6)
+/// `endSession()` is the confirm-End step: the coordinator end runs the
+/// engine end + the #13 clear-on-end snapshot wipe, `sessionState` goes
+/// `.idle` from the confirm instant, the mini flag and the #20
+/// session-number snapshot are cleared, and the phase swaps to
+/// `.endingSession(result, context)` — the REQUIRED end-of-session modal
+/// over the timer, presented by the app shell (ONE phase-driven path).
+/// Ending from mini closes the panel and restores the main window with the
+/// modal over it. While `.endingSession`, `startSession`/`startAdHocSession`
+/// refuse with the typed `.sessionEndingUnresolved` and `setVaultPath`
+/// refuses (the pending result must log into the vault the session ran
+/// against, §18). `submitEndOfSession(_:)` composes the §13 log purely
+/// (`EndOfSessionFormState.makeLog`), LOGS FIRST to the END day
+/// (`logDay(forEndedAt:)` — a midnight-spanning session logs to its end
+/// day), then applies the §6.5 completion on Yes, with typed
+/// `EndOfSessionOutcome` results for the honest two-write atomicity
+/// reality: a log-append failure retains the ending state for retry, a
+/// completion failure after a successful log is the documented partial
+/// outcome (back on Tasks).
+///
 /// # Concurrency shape
 /// `@MainActor` throughout: all mutable state is main-actor isolated, the
 /// actor stores are bridged with `await`, and the lock-synchronized
@@ -83,7 +103,7 @@ import Observation
 /// contract). Session lifecycle passthroughs are thin wrappers that keep the
 /// observable `sessionState` in step with the coordinator; the real start
 /// flow is `startSession`/`startAdHocSession` (#19) and the real end flow is
-/// #22.
+/// #22 (`endSession()` + `submitEndOfSession`).
 ///
 /// # Session start (issue #19, PRD §8.6, §9.1, §9.2, §20.3)
 /// `startSession(taskID:duration:)` orchestrates the whole START flow with
@@ -204,15 +224,32 @@ public final class AppModel {
     }
 
     /// The observable app phase (issue #19, PRD §20.3): which screen the app
-    /// shows. The start flow swaps to `.timerView` on success; `endSession`
-    /// returns to `.tasksView` (the #19 placeholder's minimal end path —
-    /// #22 owns the real end-of-session flow). The recovery choices
+    /// shows. The start flow swaps to `.timerView` on success; the end flow
+    /// (#22) moves it to `.endingSession` on confirm and to `.tasksView`
+    /// only when the required modal is submitted. The recovery choices
     /// (`restorePendingSession`/`discardPendingSession`) deliberately do not
     /// touch the phase: the actual resume/end choice UI is #20/#22, which
     /// will drive the phase from their own flows.
     public enum AppPhase: Equatable, Sendable {
         case tasksView
         case timerView(SessionContext)
+        /// The end-of-session flow is open (issue #22, PRD §12): the engine
+        /// has ended (`sessionState` is already `.idle`) and the
+        /// §13-destined `FocusSessionResult` is retained here together with
+        /// the session's display context — the payload the modal shows and
+        /// the submission consumes, while the timer stays rendered
+        /// underneath. The app shell presents the end-of-session modal for
+        /// exactly this phase — ONE presentation path.
+        ///
+        /// Submission is REQUIRED (§12.5): the phase stays here until
+        /// `submitEndOfSession` lands (success or the typed partial
+        /// outcome); while it lasts, `startSession`/`startAdHocSession`
+        /// refuse with `.sessionEndingUnresolved` and `setVaultPath`
+        /// refuses. **Honest loss window (documented, accepted v1):** the
+        /// result lives only in memory — the snapshot was already cleared
+        /// at confirm — so an app quit while the modal is up loses the
+        /// unsubmitted session. The modal is app-modal and blocking.
+        case endingSession(FocusSessionResult, SessionContext)
     }
 
     /// The typed outcome of the #19 start orchestration (`Equatable` for
@@ -230,14 +267,22 @@ public final class AppModel {
     }
 
     /// The pinned refusal vocabulary of the #19 start orchestration, in the
-    /// pinned check order (session already active → vault not configured →
-    /// pending recovery unresolved → unknown target → #9 status refusal →
-    /// ad-hoc validation/creation). Each case is distinct so the sheet can
+    /// pinned check order (session already active → end-of-session flow
+    /// unresolved (#22) → vault not configured → pending recovery
+    /// unresolved → unknown target → #9 status refusal → ad-hoc
+    /// validation/creation). Each case is distinct so the sheet can
     /// show a specific inline reason and tests can assert the exact case.
     public enum SessionStartRefusal: Equatable, Sendable {
         /// A session lifecycle is already open (running or paused) — the UI
         /// shows the running timer instead of the start flow (PRD §9.1).
         case sessionAlreadyActive
+        /// The end-of-session flow is unresolved (issue #22, §12.5): a
+        /// session has ended and the REQUIRED modal is still up
+        /// (`.endingSession`). The engine is already idle at this point, so
+        /// `coordinator.isActive` alone no longer guards the
+        /// single-lifecycle rule — this typed case does. The user submits
+        /// (or retries through a log-append failure) first.
+        case sessionEndingUnresolved
         /// No vault path is configured (`vaultStore == nil` fails closed,
         /// PRD §18).
         case vaultNotConfigured
@@ -298,9 +343,10 @@ public final class AppModel {
     /// non-nil exactly while a recovered snapshot awaits the user's
     /// restore/discard choice. nil = no pending decision.
     public private(set) var pendingSessionRecovery: ActiveSessionSnapshot?
-    /// Which screen the app shows (see `AppPhase`, issue #19). Starts on the
-    /// Tasks view; the #19 start flow swaps it to `.timerView` and
-    /// `endSession` swaps it back.
+    /// Which screen the app shows (see `AppPhase`, issue #19 + #22). Starts
+    /// on the Tasks view; the #19 start flow swaps it to `.timerView`, the
+    /// #22 confirm swaps it to `.endingSession`, and the required modal
+    /// submission swaps it to `.tasksView`.
     public private(set) var appPhase: AppPhase = .tasksView
     /// Mini-mode flag (issue #21, PRD §10.2): true exactly while the main
     /// window is collapsed to the always-on-top mini panel. Pinned choice: a
@@ -403,11 +449,15 @@ public final class AppModel {
     /// Applies a new vault location — the write path of the #15+ Settings
     /// picker. See the pinned policy in the type documentation:
     ///
-    /// - **Refused while a session is active** (`.refusedWhileSessionActive`):
-    ///   the stores, the settings and all exposed state are untouched, so no
-    ///   active session can end up logging into the wrong vault and nothing
-    ///   of the old stores is torn down mid-session. The user retries after
-    ///   the session ends.
+    /// - **Refused while a session is active or ending**
+    ///   (`.refusedWhileSessionActive`): the stores, the settings and all
+    ///   exposed state are untouched, so no active session can end up
+    ///   logging into the wrong vault and nothing of the old stores is torn
+    ///   down mid-session. The user retries after the session ends. #22
+    ///   extends the refusal to the unresolved end-of-session flow
+    ///   (`.endingSession`): the pending result must log into the vault the
+    ///   session ran against (§18) — the stores may not be swapped out from
+    ///   under it.
     /// - Otherwise the path is persisted to settings, both stores are
     ///   recreated against the new URL, the vault is reloaded and all
     ///   exposed state refreshed (`.changed`). A missing vault at the new
@@ -416,6 +466,7 @@ public final class AppModel {
     @discardableResult
     public func setVaultPath(to newURL: URL) async -> VaultPathChangeOutcome {
         guard !coordinator.isActive else { return .refusedWhileSessionActive }
+        if case .endingSession = appPhase { return .refusedWhileSessionActive }
         settings.vaultPath = newURL.path(percentEncoded: false)
         vaultURL = newURL
         vaultStore = VaultStore(vaultURL: newURL)
@@ -804,10 +855,16 @@ public final class AppModel {
     }
 
     /// The shared pinned-refusal preamble (issue #19's check order, steps
-    /// 1–3): session already active → vault not configured → pending
-    /// recovery unresolved. `nil` = all three passed.
+    /// 1–3, with #22's ending check added to the chain): session already
+    /// active → end-of-session flow unresolved → vault not configured →
+    /// pending recovery unresolved. `nil` = all passed.
     private func startPrerequisitesRefusal() -> SessionStartRefusal? {
         if coordinator.isActive { return .sessionAlreadyActive }
+        // Issue #22: after end() the engine is idle, so the active-session
+        // guard above no longer covers the still-open end-of-session flow —
+        // checked immediately after it in the pinned chain (§12.5: the form
+        // must be completed before another work session can begin).
+        if case .endingSession = appPhase { return .sessionEndingUnresolved }
         if vaultStore == nil { return .vaultNotConfigured }
         if pendingSessionRecovery != nil { return .pendingRecoveryUnresolved }
         return nil
@@ -879,22 +936,145 @@ public final class AppModel {
         sessionState = .running
     }
 
-    /// Ends the session (coordinator passthrough: engine result + snapshot
-    /// clear) and returns to idle, swapping the app phase back to
-    /// `.tasksView` (the #19 placeholder's minimal end path — #22 owns the
-    /// real end-of-session flow and will compose its own). Also clears the
-    /// mini-mode flag — the panel closes on a session end **by any path**
-    /// (issue #21 criterion 5: End from mini, End from full after restore,
-    /// the later #22 flow) — and the #20 session-number snapshot (nothing
-    /// else may show a stale session's number).
+    /// The confirm-End step of the end flow (issue #22, PRD §9.5 → §12):
+    /// runs the coordinator end (engine result + the #13 clear-on-end
+    /// snapshot wipe — verified by the coordinator's contract, and the
+    /// submission adds no snapshot and clears nothing), flips
+    /// `sessionState` to `.idle` from the confirm instant, clears the
+    /// mini-mode flag (the panel closes on a session end **by any path**,
+    /// issue #21 criterion 5) and the #20 session-number snapshot, and
+    /// swaps the phase to `.endingSession(result, context)` — the REQUIRED
+    /// end-of-session modal over the timer (presented by the app shell;
+    /// ending from mini restores the main window with the modal over it).
+    /// Only `submitEndOfSession` leaves `.endingSession`.
+    ///
+    /// - Throws: `FocusSessionError.noActiveSession` when there is no
+    ///   `.timerView` phase to end (the End control only exists on the
+    ///   active-session timer view, so this is a caller contract
+    ///   violation — nothing was ended) or the engine's own end error.
     @discardableResult
     public func endSession() throws -> FocusSessionResult {
+        guard case .timerView(let context) = appPhase else {
+            throw FocusSessionError.noActiveSession
+        }
         let result = try coordinator.end()
         sessionState = .idle
-        appPhase = .tasksView
         isMiniTimerActive = false
         sessionNumberToday = nil
+        appPhase = .endingSession(result, context)
         return result
+    }
+
+    // MARK: - End-of-session submission (issue #22, PRD §12, §13, §6.5, §18)
+
+    /// The typed outcome of the end-of-session submission (issue #22
+    /// criterion 13; `Equatable` for exact-case assertions — house style).
+    /// Internal because the submission takes the internal pure form state
+    /// (the #16/#17 house pattern — form states stay module-private).
+    ///
+    /// **Atomicity reality, documented honestly:** log append + task
+    /// completion are TWO writes (the day file + the task file);
+    /// atomicity across them is NOT claimed. The pinned ordering is log
+    /// first (§18: no silent loss of session data), then completion.
+    enum EndOfSessionOutcome: Equatable, Sendable {
+        /// The log was written and the completion (when Yes) applied; the
+        /// phase is `.tasksView` and the ending state is cleared.
+        case success
+        /// The log append failed — nothing was written (validation runs
+        /// before I/O and the append itself is atomic). The ending state is
+        /// RETAINED (the phase stays `.endingSession`, the modal stays up)
+        /// for retry: the in-memory result is the only copy of the session
+        /// (the snapshot was cleared at confirm), so dropping it would
+        /// violate §18.
+        case logAppendFailed(DailyLogError)
+        /// Typed partial failure: the session IS logged, the task status is
+        /// NOT updated. The ending state is cleared and the app returns to
+        /// Tasks, where the user can complete the task manually in the UI.
+        /// No silent divergence either way.
+        case completionFailedAfterLog(VaultStoreError)
+    }
+
+    /// The REQUIRED submission of the end-of-session modal (issue #22,
+    /// §12.5), in the pinned order:
+    ///
+    /// 1. **Compose** the §13 log purely via
+    ///    `EndOfSessionFormState.makeLog(from:)` — the seven timing fields
+    ///    from the retained result; `focus_rating`/`energy_rating` from the
+    ///    modal; `task_completed` from Yes/No; `notes` nil-when-trimmed-empty.
+    /// 2. **LOG FIRST** (§18): `DailyLogStore.appendSession` to the
+    ///    session's END day — `logDay(forEndedAt:)`, the local calendar day
+    ///    of `ended_at` (a midnight-spanning session logs to its end day).
+    /// 3. **Completion** (§6.5) — only on Yes: `VaultStore.complete(taskID)`
+    ///    (recursive parent bubble applied with ONE whole-file rewrite)
+    ///    followed by the usual synced-inventory mirror. On No: nothing.
+    /// 4. **Phase → `.tasksView`**; the ending state (the phase itself) is
+    ///    cleared.
+    ///
+    /// Failures surface as the typed `EndOfSessionOutcome` cases exactly as
+    /// documented there; only errors outside the stores' typed contracts
+    /// (none per those contracts) propagate as thrown errors.
+    ///
+    /// - Returns: `nil` for a caller contract violation — no `.endingSession`
+    ///   phase, an incomplete form, or a missing store. None of these can
+    ///   arise from the pinned call site (the sheet exists only while
+    ///   ending, its submit button is enabled only on a complete form, and
+    ///   the stores are provably non-nil while ending because a session
+    ///   requires a configured vault to start and `setVaultPath` refuses
+    ///   until the flow closes) — surfaced as `nil`, deliberately not a
+    ///   masked outcome case.
+    @discardableResult
+    func submitEndOfSession(
+        _ form: EndOfSessionFormState
+    ) async throws -> EndOfSessionOutcome? {
+        guard case .endingSession(let result, _) = appPhase, form.isSubmittable,
+            let store = vaultStore, let logs = dailyLogStore
+        else {
+            return nil
+        }
+
+        // Step 1: pure composition.
+        let log = form.makeLog(from: result)
+
+        // Step 2: LOG FIRST, to the END day (§13 daily files).
+        do {
+            try await logs.appendSession(
+                log, to: Self.logDay(forEndedAt: result.endedAt))
+        } catch let error as DailyLogError {
+            // Nothing written; the ending state is retained and the modal
+            // stays up for retry (see `EndOfSessionOutcome`).
+            return .logAppendFailed(error)
+        }
+
+        // Step 3: the §6.5 completion — Yes only. A refused/no-op decision
+        // (e.g. an already-Done target) writes nothing and is still a
+        // successful submission.
+        if form.completedChoice == .yes {
+            do {
+                try await store.complete(result.taskID)
+            } catch let error as VaultStoreError {
+                // The documented partial outcome: logged, not completed,
+                // back on Tasks (see `EndOfSessionOutcome`).
+                appPhase = .tasksView
+                return .completionFailedAfterLog(error)
+            }
+            await mirrorSyncedInventory(from: store)
+        }
+
+        // Step 4: the ending state is cleared; the app returns to Tasks.
+        appPhase = .tasksView
+        return .success
+    }
+
+    /// The day file a session logs into (issue #22 criterion 10, PRD §13):
+    /// the **local calendar day of `ended_at`** — a session spanning
+    /// midnight logs to its END day. Pure (no I/O), pinned here so the
+    /// selection cannot drift between the model and tests; the store
+    /// resolves the returned instant to `Logs/YYYY-MM-DD.md` through the
+    /// same `DailyLogDay` convention every other date parameter uses.
+    public nonisolated static func logDay(
+        forEndedAt endedAt: Date, calendar: Calendar = .current
+    ) -> Date {
+        calendar.startOfDay(for: endedAt)
     }
 
     /// Whether a session lifecycle is currently open (authoritative
