@@ -19,6 +19,21 @@ import SwiftUI
 /// suggestions, analytics. Only the title's "Parent › Child" prefix
 /// resolution is reused from #20; nothing else of the full timer's content.
 ///
+/// # Resizable layout adaptation (issue #28)
+/// The panel is user-resizable (`MiniTimerPanelController`'s `.resizable`
+/// style mask, clamped to `MiniTimerPanelLayout`'s min/max bounds), so the
+/// view no longer pins a fixed frame: it fills the panel's content view and
+/// adapts. The countdown digits scale with the window height through the
+/// pure `MiniTimerPanelLayout.countdownFontSize(forContentSize:)` helper
+/// (22pt at the min height → the #15 token base at the default size → 44pt
+/// at the max height, measured via a container-size preference so no
+/// AppKit/geometry API leaks into this file). Title, countdown and the
+/// session-number line are all single-line with a `minimumScaleFactor`, so
+/// narrow widths and tight heights degrade by scaling — never by clipping
+/// or overlapping (the honest visual confirmation of the pinned minimum is
+/// #25's manual pass). Content centers in the larger card at big sizes;
+/// the control row stays natural-size and usable across the whole range.
+///
 /// # Session number (issue #21 criterion 2 — no refetch)
 /// Read from `AppModel.sessionNumberToday` — the **#20 snapshot** lifted
 /// into the model: `TimerView` fetched it once on appear and recorded it
@@ -51,6 +66,10 @@ struct MiniTimerView: View {
     let model: AppModel
 
     @State private var showsEndConfirmation = false
+    /// The live panel content size (issue #28): captured from layout via a
+    /// preference (no AppKit), driving the countdown's adaptive font. Starts
+    /// at the default size so the first render is already correct.
+    @State private var containerSize = MiniTimerPanelLayout.contentSize
 
     var body: some View {
         VStack(spacing: DesignTokens.spacingS) {
@@ -58,9 +77,10 @@ struct MiniTimerView: View {
             controls
         }
         .padding(DesignTokens.spacingM)
-        .frame(
-            width: MiniTimerPanelLayout.contentSize.width,
-            height: MiniTimerPanelLayout.contentSize.height)
+        // Fill the resizable panel (issue #28) instead of pinning the #21
+        // fixed frame; content centers in the larger card at big sizes.
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .background(containerSizeProbe)
         .background(miniBackground)
         .confirmationDialog(
             "End this session?",
@@ -80,6 +100,22 @@ struct MiniTimerView: View {
         }
     }
 
+    /// Invisible layout probe feeding `containerSize` (issue #28): pure
+    /// SwiftUI measurement of the frame this view fills, so the countdown
+    /// font can adapt through the pure `MiniTimerPanelLayout` helper without
+    /// importing AppKit here. The measured size is the fixed panel-content
+    /// frame (independent of the font), so no feedback loop.
+    private var containerSizeProbe: some View {
+        GeometryReader { proxy in
+            Color.clear.preference(
+                key: MiniTimerContainerSizeKey.self,
+                value: proxy.size)
+        }
+        .onPreferenceChange(MiniTimerContainerSizeKey.self) { size in
+            containerSize = size
+        }
+    }
+
     // MARK: - Display area (title + countdown + session number)
 
     /// The click-to-restore display area (issue #21 criterion 3): tapping
@@ -91,13 +127,24 @@ struct MiniTimerView: View {
             Text(displayTitle)
                 .font(DesignTokens.statusGroupFont)
                 .lineLimit(1)
+                // #28 graceful narrow-width degradation: scale, never clip
+                // or overlap (the floor keeps long "Parent › Child" chains
+                // legible at the pinned minimum width).
+                .minimumScaleFactor(0.5)
             TimelineView(.periodic(from: .now, by: 1)) { _ in
                 let state = displayState()
                 Text(state.countdownText)
                     .font(.system(
-                        size: DesignTokens.miniCountdownSize, weight: .thin,
+                        size: MiniTimerPanelLayout.countdownFontSize(
+                            forContentSize: containerSize),
+                        weight: .thin,
                         design: .monospaced))
                     .monospacedDigit()
+                    .lineLimit(1)
+                    // #28: the pure helper picks the size for the window;
+                    // the scale factor is the belt-and-braces guarantee that
+                    // even an unexpected tight proposal degrades by scaling.
+                    .minimumScaleFactor(0.5)
                     .opacity(state.isPaused ? DesignTokens.pausedTextOpacity : 1)
                     .animation(DesignTokens.stateAnimation, value: state.isPaused)
             }
@@ -107,6 +154,8 @@ struct MiniTimerView: View {
                 Text("Session \(number) today")
                     .font(DesignTokens.annotationFont)
                     .foregroundStyle(.secondary)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.5)
             }
         }
         .contentShape(Rectangle())
@@ -193,5 +242,15 @@ struct MiniTimerView: View {
     private func endSession() {
         guard model.isSessionActive else { return }
         _ = try? model.endSession()
+    }
+}
+
+/// Preference key carrying the mini view's container size (issue #28): the
+/// plumbing behind `MiniTimerView.containerSizeProbe` — pure SwiftUI, no
+/// AppKit, no state beyond the value itself.
+private struct MiniTimerContainerSizeKey: PreferenceKey {
+    static let defaultValue: CGSize = .zero
+    static func reduce(value: inout CGSize, nextValue: () -> CGSize) {
+        value = nextValue()
     }
 }

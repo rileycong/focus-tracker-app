@@ -4,16 +4,20 @@ import XCTest
 // The #21 nested types used below; file-local aliases keep it readable.
 private typealias SessionContext = AppModel.SessionContext
 
-// NOTE (issue #21 criterion 6 — honest AppKit reality): the real `NSPanel`
-// floating / always-on-top / non-activating behavior is **not unit-testable**
-// — this suite covers everything around it: the pure positioning/frame math
-// (`MiniTimerPanelLayout`), and the `AppModel` mini-mode transitions
+// NOTE (issues #21/#28 — honest AppKit reality): the real `NSPanel`
+// floating / always-on-top / non-activating / user-resize-drag behavior is
+// **not unit-testable** — this suite covers everything around it: the pure
+// positioning/frame math (`MiniTimerPanelLayout`, #21), the resize-clamp +
+// countdown-scale helpers and the property-level panel facts (`#28`: the
+// real styleMask/`canBecomeKey`/content bounds are asserted in-process in
+// `MiniTimerPanelPropertyTests`), and the `AppModel` mini-mode transitions
 // (collapse ↔ restore with the session untouched, and the end-from-mini
-// path). Manual verification of the actual floating/focus behavior is
-// deferred to the #24/#25 end-to-end verification passes. The mini's
-// countdown derivation itself reuses `TimerDisplayState.derive` unchanged
-// (no mini-specific pure logic was added), so its behavior stays pinned by
-// the existing `TimerDisplayTests` — extended only with the frame math here.
+// path). Manual verification of the actual floating/focus/resize-drag feel
+// and the no-clip check at the pinned minimum is deferred to the
+// #24/#25 end-to-end verification passes. The mini's countdown derivation
+// itself reuses `TimerDisplayState.derive` unchanged (no mini-specific pure
+// logic was added), so its behavior stays pinned by the existing
+// `TimerDisplayTests` — extended with the frame and resize math here.
 
 /// Pure positioning/frame math for the mini panel (issue #21 criterion 6):
 /// `MiniTimerPanelLayout.defaultTopRightFrame` — tested without any AppKit
@@ -75,6 +79,223 @@ final class MiniTimerPanelLayoutTests: XCTestCase {
 
         XCTAssertEqual(CGRect(
             x: 800 - 200 - 5, y: 600 - 80 - 5, width: 200, height: 80), frame)
+    }
+}
+
+/// Resize-constraint helpers for the user-resizable mini panel (issue #28):
+/// the pinned min/max bounds and the pure clamp + countdown-font-scale
+/// math. The AppKit enforcement on live edge-drags is not unit-testable;
+/// these tests pin the logic the panel is configured from (and which the
+/// view's adaptive font relies on). The physical drag-body-vs-drag-edge
+/// feel and the visual check at the pinned minimum stay #25's manual pass
+/// (TCC-deferred, honestly noted).
+final class MiniTimerResizeTests: XCTestCase {
+
+    // MARK: - Pinned bounds (issue #28 criterion 2)
+
+    func testBoundsStayInsideTheSuggestedEnvelope() {
+        // The issue's suggested floor/ceiling: min ≥ 200×80, max ≤ 520×240.
+        XCTAssertGreaterThanOrEqual(
+            MiniTimerPanelLayout.contentMinSize.width, 200)
+        XCTAssertGreaterThanOrEqual(
+            MiniTimerPanelLayout.contentMinSize.height, 80)
+        XCTAssertLessThanOrEqual(
+            MiniTimerPanelLayout.contentMaxSize.width, 520)
+        XCTAssertLessThanOrEqual(
+            MiniTimerPanelLayout.contentMaxSize.height, 240)
+    }
+
+    func testBoundsBracketTheDefaultContentSize() {
+        // The #21 default must remain reachable: min ≤ default ≤ max per
+        // axis (a min above the default would grow the panel on show).
+        XCTAssertLessThanOrEqual(
+            MiniTimerPanelLayout.contentMinSize.width,
+            MiniTimerPanelLayout.contentSize.width)
+        XCTAssertLessThanOrEqual(
+            MiniTimerPanelLayout.contentMinSize.height,
+            MiniTimerPanelLayout.contentSize.height)
+        XCTAssertGreaterThanOrEqual(
+            MiniTimerPanelLayout.contentMaxSize.width,
+            MiniTimerPanelLayout.contentSize.width)
+        XCTAssertGreaterThanOrEqual(
+            MiniTimerPanelLayout.contentMaxSize.height,
+            MiniTimerPanelLayout.contentSize.height)
+    }
+
+    // MARK: - clampedContentSize
+
+    func testClampPassesSizesInsideBoundsThrough() {
+        XCTAssertEqual(
+            MiniTimerPanelLayout.clampedContentSize(
+                MiniTimerPanelLayout.contentSize),
+            MiniTimerPanelLayout.contentSize)
+        let mid = CGSize(width: 300, height: 150)
+        XCTAssertEqual(
+            MiniTimerPanelLayout.clampedContentSize(mid), mid)
+    }
+
+    func testClampCollapsesBelowMinToMin() {
+        XCTAssertEqual(
+            MiniTimerPanelLayout.clampedContentSize(
+                CGSize(width: 100, height: 40)),
+            MiniTimerPanelLayout.contentMinSize)
+    }
+
+    func testClampCapsAboveMaxToMax() {
+        XCTAssertEqual(
+            MiniTimerPanelLayout.clampedContentSize(
+                CGSize(width: 900, height: 500)),
+            MiniTimerPanelLayout.contentMaxSize)
+    }
+
+    func testClampIsIndependentPerAxis() {
+        // Too narrow but too tall → min width, max width's height stays.
+        XCTAssertEqual(
+            MiniTimerPanelLayout.clampedContentSize(
+                CGSize(width: 150, height: 400)),
+            CGSize(
+                width: MiniTimerPanelLayout.contentMinSize.width,
+                height: MiniTimerPanelLayout.contentMaxSize.height))
+        // Wide but flat → max width, min height.
+        XCTAssertEqual(
+            MiniTimerPanelLayout.clampedContentSize(
+                CGSize(width: 700, height: 50)),
+            CGSize(
+                width: MiniTimerPanelLayout.contentMaxSize.width,
+                height: MiniTimerPanelLayout.contentMinSize.height))
+    }
+
+    // MARK: - countdownFontSize(forContentSize:)
+
+    func testCountdownFontAtDefaultIsTheDesignToken() {
+        XCTAssertEqual(
+            MiniTimerPanelLayout.countdownFontSize(
+                forContentSize: MiniTimerPanelLayout.contentSize),
+            DesignTokens.miniCountdownSize)
+    }
+
+    func testCountdownFontScalesDownToTheMinBound() {
+        // At the pinned min the helper's smallest step applies; between the
+        // min and default heights it shrinks monotonically.
+        XCTAssertEqual(
+            MiniTimerPanelLayout.countdownFontSize(
+                forContentSize: MiniTimerPanelLayout.contentMinSize),
+            MiniTimerPanelLayout.countdownMinFontSize)
+        let quarter = MiniTimerPanelLayout.countdownMinFontSize
+        let base = DesignTokens.miniCountdownSize
+        let mid = CGSize(
+            width: MiniTimerPanelLayout.contentSize.width,
+            height: (MiniTimerPanelLayout.contentMinSize.height
+                + MiniTimerPanelLayout.contentSize.height) / 2)
+        let fontSize = MiniTimerPanelLayout.countdownFontSize(forContentSize: mid)
+        XCTAssertGreaterThan(fontSize, quarter)
+        XCTAssertLessThan(fontSize, base)
+    }
+
+    func testCountdownFontScalesUpToTheMaxBound() {
+        XCTAssertEqual(
+            MiniTimerPanelLayout.countdownFontSize(
+                forContentSize: MiniTimerPanelLayout.contentMaxSize),
+            MiniTimerPanelLayout.countdownMaxFontSize)
+        let base = DesignTokens.miniCountdownSize
+        let mid = CGSize(
+            width: MiniTimerPanelLayout.contentSize.width,
+            height: (MiniTimerPanelLayout.contentSize.height
+                + MiniTimerPanelLayout.contentMaxSize.height) / 2)
+        let fontSize = MiniTimerPanelLayout.countdownFontSize(forContentSize: mid)
+        XCTAssertGreaterThan(fontSize, base)
+        XCTAssertLessThan(fontSize, MiniTimerPanelLayout.countdownMaxFontSize)
+    }
+
+    func testCountdownFontClampsOutOfRangeHeights() {
+        XCTAssertEqual(
+            MiniTimerPanelLayout.countdownFontSize(
+                forContentSize: CGSize(width: 10, height: 10)),
+            MiniTimerPanelLayout.countdownMinFontSize)
+        XCTAssertEqual(
+            MiniTimerPanelLayout.countdownFontSize(
+                forContentSize: CGSize(width: 2000, height: 2000)),
+            MiniTimerPanelLayout.countdownMaxFontSize)
+    }
+
+    func testCountdownFontIsHeightDrivenOnly() {
+        // Same height, different widths → same size (the countdown is the
+        // panel's vertical anchor; documented as height-driven).
+        let narrow = MiniTimerPanelLayout.countdownFontSize(
+            forContentSize: CGSize(
+                width: MiniTimerPanelLayout.contentMinSize.width, height: 112))
+        let wide = MiniTimerPanelLayout.countdownFontSize(
+            forContentSize: CGSize(
+                width: MiniTimerPanelLayout.contentMaxSize.width, height: 112))
+        XCTAssertEqual(narrow, wide)
+        XCTAssertEqual(narrow, DesignTokens.miniCountdownSize)
+    }
+}
+
+/// Property-level panel facts for the #28 resizable config (issue #28
+/// criterion 1): unlike the behavioral floating/focus/resize-drag parts
+/// (not unit-testable, #25's manual pass), the mask, `canBecomeKey`,
+/// title-bar chrome, content-size bounds and movability ARE assertable
+/// in-process on a real `NSPanel` — this pins the "no title bar, no key
+/// round-trip" verification the issue asks for on the real build.
+@MainActor
+final class MiniTimerPanelPropertyTests: XCTestCase {
+
+    private func makePanel() -> NSPanel {
+        MiniTimerPanelController.makePanel(
+            defaultVisibleFrame: CGRect(x: 0, y: 0, width: 1440, height: 900))
+    }
+
+    func testResizableMaskStaysBorderlessWithoutTitleBar() {
+        let panel = makePanel()
+        // Exactly the configured mask: #28's `.resizable` added, no
+        // `.titled` — a borderless panel with resize edges and no chrome.
+        XCTAssertEqual(
+            panel.styleMask, [.borderless, .nonactivatingPanel, .resizable])
+        XCTAssertFalse(panel.styleMask.contains(.titled))
+        XCTAssertNil(panel.standardWindowButton(.closeButton))
+        XCTAssertNil(panel.standardWindowButton(.miniaturizeButton))
+        XCTAssertNil(panel.standardWindowButton(.zoomButton))
+        XCTAssertNil(panel.standardWindowButton(.toolbarButton))
+        panel.orderOut(nil)
+    }
+
+    func testResizableMaskDoesNotMakeThePanelKeyOrMain() {
+        let panel = makePanel()
+        // The pinned non-activating contract (#21, re-verified for #28):
+        // `.resizable` must not change the borderless defaults.
+        XCTAssertFalse(panel.canBecomeKey)
+        XCTAssertFalse(panel.canBecomeMain)
+        panel.orderOut(nil)
+    }
+
+    func testPanelCarriesTheClampBoundsAndMovability() {
+        let panel = makePanel()
+        XCTAssertEqual(
+            panel.contentMinSize,
+            NSSize(
+                width: MiniTimerPanelLayout.contentMinSize.width,
+                height: MiniTimerPanelLayout.contentMinSize.height))
+        XCTAssertEqual(
+            panel.contentMaxSize,
+            NSSize(
+                width: MiniTimerPanelLayout.contentMaxSize.width,
+                height: MiniTimerPanelLayout.contentMaxSize.height))
+        XCTAssertTrue(panel.isMovableByWindowBackground)
+        XCTAssertFalse(panel.hidesOnDeactivate)
+        panel.orderOut(nil)
+    }
+
+    func testPanelPresentsTheDefaultTopRightFrame() {
+        // No frame persistence (#28 criterion 5): a fresh panel always
+        // presents the default 260×112 content at the default top-right
+        // spot for its screen.
+        let visible = CGRect(x: 0, y: 0, width: 1440, height: 900)
+        let panel = MiniTimerPanelController.makePanel(defaultVisibleFrame: visible)
+        XCTAssertEqual(
+            panel.frame,
+            MiniTimerPanelLayout.defaultTopRightFrame(visibleFrame: visible))
+        panel.orderOut(nil)
     }
 }
 
