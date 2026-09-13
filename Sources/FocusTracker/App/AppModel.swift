@@ -94,7 +94,29 @@ import Observation
 /// `EndOfSessionOutcome` results for the honest two-write atomicity
 /// reality: a log-append failure retains the ending state for retry, a
 /// completion failure after a successful log is the documented partial
-/// outcome (back on Tasks).
+/// outcome (back on Tasks). Issue #23 reroutes the flow's exit: the two
+/// outcomes that leave the modal (`.success`, `.completionFailedAfterLog`)
+/// stop at `.postSessionChoice` — the explicit Start Next Session / Take
+/// Break choice, nothing auto-starting — instead of landing directly on
+/// Tasks; `.logAppendFailed` keeps the modal up for retry.
+///
+/// # Break flow (issue #23, PRD §14)
+/// The opt-in break behind the post-submission choice: `takeBreak(duration:)`
+/// starts a `BreakTimerEngine` (default 5 minutes, configured at the choice
+/// step before start only) and swaps the phase to `.breakActive`; the break
+/// view renders the countdown from the model's pure passthroughs and the
+/// `TimelineView` tick. Expiry is observable (`isBreakExpired`) and surfaces
+/// an IN-APP banner — no system notifications, no auto-dismiss, no
+/// auto-start. `endBreak()` serves both the End-break-early control and the
+/// post-expiry path back: engine end → `BreakLog` composed from the result →
+/// `DailyLogStore.appendBreak` to the END day via `logDay(forEndedAt:)`
+/// reused AS-IS → `.tasksView` in every outcome. Log failure is NON-BLOCKING
+/// by pinned design (small warning + continue — documented divergence from
+/// the session flow's retry-in-place). While a break runs,
+/// `startSession`/`startAdHocSession` refuse (`.breakActive`), and so does
+/// `setVaultPath` (the break will append through the current stores); during
+/// the choice phase the starts refuse too (`.postSessionChoiceActive`) but
+/// `setVaultPath` does not — nothing is pending a write yet.
 ///
 /// # Concurrency shape
 /// `@MainActor` throughout: all mutable state is main-actor isolated, the
@@ -250,6 +272,41 @@ public final class AppModel {
         /// at confirm — so an app quit while the modal is up loses the
         /// unsubmitted session. The modal is app-modal and blocking.
         case endingSession(FocusSessionResult, SessionContext)
+        /// The post-submission choice (issue #23, PRD §14.1, §20.7): after a
+        /// submission that leaves the end-of-session modal — BOTH
+        /// `.success` and the typed `.completionFailedAfterLog` partial
+        /// outcome, the two outcomes that leave the flow — the flow stops
+        /// here for the explicit **Start Next Session / Take Break** choice.
+        /// NOTHING auto-starts and NO break auto-begins (§14.1; §19
+        /// non-goals: automatic break start).
+        ///
+        /// Payload (engineer's choice, documented): the §6.5 completion
+        /// failure carried through from the `.completionFailedAfterLog`
+        /// submission — nil on the `.success` path — so the choice view
+        /// surfaces the #22 partial-outcome warning inline and the insertion
+        /// does not swallow #22's documented guidance. `.logAppendFailed`
+        /// does NOT reach this phase (the modal stays up for retry).
+        ///
+        /// Presentation (engineer's choice, documented): a plain inline view
+        /// swapped in by the app shell's ONE phase-driven path — after the
+        /// blocking modal the timer has nothing to render under a sheet, so
+        /// a full calm screen is more honest than a small sheet over
+        /// nothing. `startSession`/`startAdHocSession` refuse with the
+        /// typed `.postSessionChoiceActive` (defensive single-lifecycle
+        /// parity); `setVaultPath` does NOT refuse here — nothing is pending
+        /// a write until a break actually starts.
+        case postSessionChoice(completionFailure: VaultStoreError?)
+        /// The break countdown is running (issue #23, PRD §14.2).
+        /// Payload-free (engineer's choice, documented): a break links to no
+        /// task, so there is no display context to carry — the break view
+        /// derives every value from the model's break-engine passthroughs
+        /// (`breakRemainingSeconds`, `breakProgressFraction`,
+        /// `isBreakExpired`). While this phase is up,
+        /// `startSession`/`startAdHocSession` refuse with the typed
+        /// `.breakActive` and `setVaultPath` refuses (the pending break will
+        /// `appendBreak` through the current stores, §18). Only the user's
+        /// actions leave it — no auto-dismiss, no auto-start (§14.3).
+        case breakActive
     }
 
     /// The typed outcome of the #19 start orchestration (`Equatable` for
@@ -268,10 +325,11 @@ public final class AppModel {
 
     /// The pinned refusal vocabulary of the #19 start orchestration, in the
     /// pinned check order (session already active → end-of-session flow
-    /// unresolved (#22) → vault not configured → pending recovery
-    /// unresolved → unknown target → #9 status refusal → ad-hoc
-    /// validation/creation). Each case is distinct so the sheet can
-    /// show a specific inline reason and tests can assert the exact case.
+    /// unresolved (#22) → break active (#23) → post-session choice (#23) →
+    /// vault not configured → pending recovery unresolved → unknown target →
+    /// #9 status refusal → ad-hoc validation/creation). Each case is
+    /// distinct so the sheet can show a specific inline reason and tests can
+    /// assert the exact case.
     public enum SessionStartRefusal: Equatable, Sendable {
         /// A session lifecycle is already open (running or paused) — the UI
         /// shows the running timer instead of the start flow (PRD §9.1).
@@ -283,6 +341,17 @@ public final class AppModel {
         /// single-lifecycle rule — this typed case does. The user submits
         /// (or retries through a log-append failure) first.
         case sessionEndingUnresolved
+        /// A break is running (issue #23 criterion 19, PRD §14.3): the
+        /// break flow owns the app until the user ends it — finish or end
+        /// the break first, then start normally.
+        case breakActive
+        /// The post-submission choice is up (issue #23 criterion 20, the
+        /// `.sessionEndingUnresolved` precedent): the choice screen blocks
+        /// the app, so this is defensive typed parity for the
+        /// single-lifecycle rule — cheap, and it keeps every guarded state
+        /// in the pinned chain. Choose Start Next Session (or take a break
+        /// and end it) first.
+        case postSessionChoiceActive
         /// No vault path is configured (`vaultStore == nil` fails closed,
         /// PRD §18).
         case vaultNotConfigured
@@ -343,10 +412,12 @@ public final class AppModel {
     /// non-nil exactly while a recovered snapshot awaits the user's
     /// restore/discard choice. nil = no pending decision.
     public private(set) var pendingSessionRecovery: ActiveSessionSnapshot?
-    /// Which screen the app shows (see `AppPhase`, issue #19 + #22). Starts
-    /// on the Tasks view; the #19 start flow swaps it to `.timerView`, the
-    /// #22 confirm swaps it to `.endingSession`, and the required modal
-    /// submission swaps it to `.tasksView`.
+    /// Which screen the app shows (see `AppPhase`, issue #19 + #22 + #23).
+    /// Starts on the Tasks view; the #19 start flow swaps it to
+    /// `.timerView`, the #22 confirm swaps it to `.endingSession`, the
+    /// required modal submission moves the flow to `.postSessionChoice`
+    /// (#23), and the choice's two controls (or the break flow) return it to
+    /// `.tasksView`.
     public private(set) var appPhase: AppPhase = .tasksView
     /// Mini-mode flag (issue #21, PRD §10.2): true exactly while the main
     /// window is collapsed to the always-on-top mini panel. Pinned choice: a
@@ -457,7 +528,12 @@ public final class AppModel {
     ///   extends the refusal to the unresolved end-of-session flow
     ///   (`.endingSession`): the pending result must log into the vault the
     ///   session ran against (§18) — the stores may not be swapped out from
-    ///   under it.
+    ///   under it. #23 extends it once more to a running break
+    ///   (`.breakActive`): the pending break will `appendBreak` through the
+    ///   current stores, and the path may not be swapped out from under a
+    ///   write-in-flight flow (§18). While the post-session choice phase is
+    ///   up it does NOT refuse — nothing is pending a write until the break
+    ///   actually starts.
     /// - Otherwise the path is persisted to settings, both stores are
     ///   recreated against the new URL, the vault is reloaded and all
     ///   exposed state refreshed (`.changed`). A missing vault at the new
@@ -467,6 +543,11 @@ public final class AppModel {
     public func setVaultPath(to newURL: URL) async -> VaultPathChangeOutcome {
         guard !coordinator.isActive else { return .refusedWhileSessionActive }
         if case .endingSession = appPhase { return .refusedWhileSessionActive }
+        // Issue #23 (criterion 21): a pending break appends through the
+        // CURRENT stores — the path may not move under the write-in-flight
+        // flow (§18). The choice phase deliberately does not refuse
+        // (nothing is pending a write until the break starts).
+        if case .breakActive = appPhase { return .refusedWhileSessionActive }
         settings.vaultPath = newURL.path(percentEncoded: false)
         vaultURL = newURL
         vaultStore = VaultStore(vaultURL: newURL)
@@ -855,9 +936,10 @@ public final class AppModel {
     }
 
     /// The shared pinned-refusal preamble (issue #19's check order, steps
-    /// 1–3, with #22's ending check added to the chain): session already
-    /// active → end-of-session flow unresolved → vault not configured →
-    /// pending recovery unresolved. `nil` = all passed.
+    /// 1–3, with #22's ending check and #23's break/choice checks added to
+    /// the chain): session already active → end-of-session flow unresolved →
+    /// break active → post-session choice → vault not configured → pending
+    /// recovery unresolved. `nil` = all passed.
     private func startPrerequisitesRefusal() -> SessionStartRefusal? {
         if coordinator.isActive { return .sessionAlreadyActive }
         // Issue #22: after end() the engine is idle, so the active-session
@@ -865,6 +947,13 @@ public final class AppModel {
         // checked immediately after it in the pinned chain (§12.5: the form
         // must be completed before another work session can begin).
         if case .endingSession = appPhase { return .sessionEndingUnresolved }
+        // Issue #23 (criterion 19), immediately after .sessionEndingUnresolved
+        // in the pinned chain so both entry points inherit it: a running
+        // break owns the app until the user ends it (PRD §14.3).
+        if case .breakActive = appPhase { return .breakActive }
+        // Issue #23 (criterion 20): the choice screen blocks the app —
+        // defensive typed parity for the single-lifecycle rule.
+        if case .postSessionChoice = appPhase { return .postSessionChoiceActive }
         if vaultStore == nil { return .vaultNotConfigured }
         if pendingSessionRecovery != nil { return .pendingRecoveryUnresolved }
         return nil
@@ -976,9 +1065,18 @@ public final class AppModel {
     /// completion are TWO writes (the day file + the task file);
     /// atomicity across them is NOT claimed. The pinned ordering is log
     /// first (§18: no silent loss of session data), then completion.
+    ///
+    /// **Exit routing (issue #23, PRD §14.1):** the two outcomes that leave
+    /// the flow — `.success` and `.completionFailedAfterLog` — stop at the
+    /// `.postSessionChoice` phase (Start Next Session / Take Break) instead
+    /// of landing directly on `.tasksView`; the partial outcome carries its
+    /// completion failure in the phase payload so the choice view surfaces
+    /// the #22 warning inline. `.logAppendFailed` keeps the modal up for
+    /// retry and shows NO choice.
     enum EndOfSessionOutcome: Equatable, Sendable {
         /// The log was written and the completion (when Yes) applied; the
-        /// phase is `.tasksView` and the ending state is cleared.
+        /// flow stops at the #23 post-session choice (the ending state is
+        /// cleared).
         case success
         /// The log append failed — nothing was written (validation runs
         /// before I/O and the append itself is atomic). The ending state is
@@ -988,9 +1086,10 @@ public final class AppModel {
         /// violate §18.
         case logAppendFailed(DailyLogError)
         /// Typed partial failure: the session IS logged, the task status is
-        /// NOT updated. The ending state is cleared and the app returns to
-        /// Tasks, where the user can complete the task manually in the UI.
-        /// No silent divergence either way.
+        /// NOT updated. The ending state is cleared and the flow stops at
+        /// the #23 post-session choice (which surfaces this failure's #22
+        /// guidance inline — complete the task manually from the task
+        /// list). No silent divergence either way.
         case completionFailedAfterLog(VaultStoreError)
     }
 
@@ -1007,8 +1106,10 @@ public final class AppModel {
     /// 3. **Completion** (§6.5) — only on Yes: `VaultStore.complete(taskID)`
     ///    (recursive parent bubble applied with ONE whole-file rewrite)
     ///    followed by the usual synced-inventory mirror. On No: nothing.
-    /// 4. **Phase → `.tasksView`**; the ending state (the phase itself) is
-    ///    cleared.
+    /// 4. **Phase → `.postSessionChoice`** (issue #23): the ending state is
+    ///    cleared and the explicit Start Next Session / Take Break choice is
+    ///    shown (the `.completionFailedAfterLog` payload carries the
+    ///    completion failure for the inline #22 warning).
     ///
     /// Failures surface as the typed `EndOfSessionOutcome` cases exactly as
     /// documented there; only errors outside the stores' typed contracts
@@ -1052,16 +1153,19 @@ public final class AppModel {
             do {
                 try await store.complete(result.taskID)
             } catch let error as VaultStoreError {
-                // The documented partial outcome: logged, not completed,
-                // back on Tasks (see `EndOfSessionOutcome`).
-                appPhase = .tasksView
+                // The documented partial outcome: logged, not completed.
+                // Issue #23 routes the flow's exit to the post-session
+                // choice, carrying the failure for the inline #22 warning.
+                appPhase = .postSessionChoice(completionFailure: error)
                 return .completionFailedAfterLog(error)
             }
             await mirrorSyncedInventory(from: store)
         }
 
-        // Step 4: the ending state is cleared; the app returns to Tasks.
-        appPhase = .tasksView
+        // Step 4: the ending state is cleared; the flow stops at the #23
+        // post-session choice (Start Next Session / Take Break — nothing
+        // auto-starts).
+        appPhase = .postSessionChoice(completionFailure: nil)
         return .success
     }
 
@@ -1076,6 +1180,174 @@ public final class AppModel {
     ) -> Date {
         calendar.startOfDay(for: endedAt)
     }
+
+    // MARK: - Break flow (issue #23, PRD §14)
+
+    /// The typed outcome of ending a break (issue #23 criterion 18;
+    /// `Equatable` for exact-case assertions — house style).
+    ///
+    /// **Non-blocking by pinned design (documented divergence from the
+    /// session flow's retry-in-place, #22):** a log failure does NOT trap
+    /// the break UX — a small warning is surfaced
+    /// (`pendingBreakLogWarning`) and the flow continues to `.tasksView`.
+    /// Rationale: the break is transient and in-memory only (nothing is
+    /// retained to retry with — the engine result and the composed log are
+    /// the only copies, both dropped with the flow), `duration` is the
+    /// single field of record, and a lost break log is the accepted, stated
+    /// loss. The session flow retains its result because it is the ONLY
+    /// copy of the session (§18); a break has no such standing.
+    public enum BreakLogOutcome: Equatable, Sendable {
+        /// The break was logged to its END day file; the phase is
+        /// `.tasksView`.
+        case logged(BreakLog)
+        /// The append failed — nothing was written (validation runs before
+        /// I/O and the append is atomic). NON-BLOCKING: the warning is
+        /// surfaced and the flow still continues to `.tasksView` (see the
+        /// type documentation).
+        case logFailed(BreakLog, DailyLogError)
+    }
+
+    /// The live break engine, or nil when no break is running. The engine is
+    /// a value type; the model owns the one live instance (same shape as the
+    /// coordinator's session engine, minus the coordinator — there is no
+    /// autosave, no snapshot, no recovery: **breaks are NOT persisted**
+    /// (#13 grooming note / PRD §14), so quitting the app mid-break loses
+    /// the break and logs nothing — the documented honest loss).
+    private var breakEngine: BreakTimerEngine?
+
+    /// The small non-blocking warning surfaced after a break-log append
+    /// failure (issue #23 criterion 18): rendered by the app shell as a
+    /// small banner; the flow continues to `.tasksView` either way. Cleared
+    /// by the next `takeBreak` (a fresh break context) and by the next
+    /// successful `endBreak`.
+    public private(set) var pendingBreakLogWarning: String?
+
+    /// Whether a break is currently running (the `.breakActive` phase).
+    public var isBreakActive: Bool { breakEngine != nil }
+
+    /// The configured duration of the active break in seconds (nil when no
+    /// break). Fixed at `takeBreak` — no mid-break reconfiguration (§14.2).
+    public var breakDurationSeconds: TimeInterval? {
+        breakEngine?.configuredDurationSeconds
+    }
+
+    /// See `BreakTimerEngine.remainingSeconds(at:)`, evaluated at the shared
+    /// clock's current monotonic reading. nil when no break. Time-derived:
+    /// not reactive on its own — the break view's `TimelineView(.periodic)`
+    /// tick supplies the re-render (the #20/#21 pattern).
+    public var breakRemainingSeconds: Int? {
+        breakEngine?.remainingSeconds(at: sessionClock.monotonicSeconds)
+    }
+
+    /// See `BreakTimerEngine.progressFraction(at:)`. 0 when no break.
+    public var breakProgressFraction: Double {
+        breakEngine?.progressFraction(at: sessionClock.monotonicSeconds) ?? 0
+    }
+
+    /// The observable break-expired state (issue #23 criterion 15): pure
+    /// time derivation like `isSessionExpired` — false when no break. The
+    /// break view's `TimelineView(.periodic)` tick re-reads it every second
+    /// and surfaces the in-app notification banner when it flips true (no
+    /// `UNUserNotificationCenter`, no auto-dismiss, no auto-start).
+    public var isBreakExpired: Bool {
+        breakEngine?.isExpired(at: sessionClock.monotonicSeconds) ?? false
+    }
+
+    /// Take Break (issue #23 criterion 5, PRD §14.2): starts the break
+    /// countdown with the duration configured at the choice step (default 5
+    /// minutes) and swaps the phase to `.breakActive`. Configuration happens
+    /// before start only; no mid-break reconfiguration.
+    ///
+    /// - Throws: `BreakTimerError.breakAlreadyActive` — unreachable from the
+    ///   pinned call site (the control exists only on the choice view, where
+    ///   no break can be running); surfaced, never swallowed.
+    public func takeBreak(
+        duration: TimeInterval = BreakTimerEngine.defaultDurationSeconds
+    ) throws {
+        var engine = BreakTimerEngine(clock: sessionClock)
+        try engine.start(duration: duration)
+        breakEngine = engine
+        pendingBreakLogWarning = nil
+        appPhase = .breakActive
+    }
+
+    /// Start Next Session (issue #23 criterion 4, PINNED): returns to
+    /// `.tasksView` and does NOT auto-open the session-start sheet and does
+    /// NOT auto-start anything — the user picks a task and starts normally
+    /// via #19 (PRD §20.7 "Return to task/session selection"; §14.3's
+    /// rationale — the next session requires selecting a task). A typed
+    /// no-op outside the choice phase (the control only exists there, the
+    /// `collapseToMiniTimer` guard precedent).
+    public func chooseStartNextSession() {
+        guard case .postSessionChoice = appPhase else { return }
+        appPhase = .tasksView
+    }
+
+    /// Ends the active break — the ONE API behind the End-break-early
+    /// control AND the post-expiry path back (issue #23 criteria 14/16; one
+    /// behavior, two labels in the UI): the engine `end()` result composes
+    /// the `BreakLog` (#11 type, actual — post-expiry clamped — duration),
+    /// which is appended via `DailyLogStore.appendBreak` to the break's END
+    /// day: `AppModel.logDay(forEndedAt:)` reused AS-IS (a break spanning
+    /// midnight logs to its end day). The phase returns to `.tasksView` in
+    /// EVERY outcome — the break UX must never trap.
+    ///
+    /// - Returns: nil for a caller contract violation — no active break (the
+    ///   controls only exist on the break view) — or the typed
+    ///   `BreakLogOutcome` (`Equatable` for exact-case assertions).
+    @discardableResult
+    public func endBreak() async -> BreakLogOutcome? {
+        guard var engine = breakEngine, let logs = dailyLogStore else {
+            // The stores are provably non-nil while a break runs (a break
+            // starts only from the post-session choice, which only a
+            // configured vault reaches, and `setVaultPath` refuses while
+            // the break is up) — nil is a caller contract violation,
+            // surfaced as nil, deliberately not a masked outcome case (the
+            // #22 submission precedent).
+            return nil
+        }
+        let result: BreakResult
+        do {
+            result = try engine.end()
+        } catch {
+            // Unreachable: `breakEngine` is non-nil exactly while the
+            // engine's lifecycle is open (cleared below on every end).
+            // Fail-closed rather than force-try.
+            return nil
+        }
+        breakEngine = nil
+        let log = BreakLog(
+            breakID: result.breakID,
+            startedAt: result.startedAt,
+            endedAt: result.endedAt,
+            duration: result.duration)
+        let outcome: BreakLogOutcome
+        do {
+            try await logs.appendBreak(log, to: Self.logDay(forEndedAt: result.endedAt))
+            outcome = .logged(log)
+            pendingBreakLogWarning = nil
+        } catch let dailyLogError as DailyLogError {
+            // Non-blocking by pinned design: surface the small warning and
+            // CONTINUE to `.tasksView` (documented divergence from #22's
+            // retry-in-place — see `BreakLogOutcome`).
+            pendingBreakLogWarning = dailyLogError.description
+            outcome = .logFailed(log, dailyLogError)
+        } catch {
+            // Unreachable per DailyLogStore's contract (its append path
+            // throws only `DailyLogError`) — but the break UX must never
+            // trap and nothing is retained to retry with, so the flow
+            // fails closed honestly: the description is surfaced as the
+            // warning, the flow still continues to `.tasksView`, and no
+            // masked `.logFailed` is invented for a shape the store cannot
+            // produce.
+            pendingBreakLogWarning = String(describing: error)
+            appPhase = .tasksView
+            return nil
+        }
+        appPhase = .tasksView
+        return outcome
+    }
+
 
     /// Whether a session lifecycle is currently open (authoritative
     /// coordinator passthrough).

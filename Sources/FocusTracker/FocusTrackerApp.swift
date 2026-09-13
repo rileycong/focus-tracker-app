@@ -24,11 +24,15 @@ struct FocusTrackerApp: App {
 
     var body: some Scene {
         WindowGroup {
-            // The app-phase swap (issue #19, PRD §20.3; end flow issue #22):
-            // the start flow moves the app to the full-screen timer view
-            // (issue #20); confirming End moves it to `.endingSession` — the
-            // timer stays rendered with the blocking end-of-session modal
-            // over it — and the required submission returns to Tasks.
+            // The app-phase swap (issue #19, PRD §20.3; end flow issue #22;
+            // break flow issue #23): the start flow moves the app to the
+            // full-screen timer view (issue #20); confirming End moves it to
+            // `.endingSession` — the timer stays rendered with the blocking
+            // end-of-session modal over it — the required submission stops
+            // at `.postSessionChoice` (issue #23: Start Next Session /
+            // Take Break, NOTHING auto-starting), a running break shows the
+            // `.breakActive` countdown screen, and the choice's controls (or
+            // the break's end) return to Tasks.
             // The `.task` bootstrap runs once per window — the phase swap
             // replaces the content, not the window identity.
             Group {
@@ -51,6 +55,37 @@ struct FocusTrackerApp: App {
                                 result: result, context: context, model: model)
                                 .interactiveDismissDisabled(true)
                         }
+                case .postSessionChoice(let completionFailure):
+                    // The post-submission choice (issue #23, PRD §14.1):
+                    // inline view (engineer's choice, documented on the
+                    // phase) in the same ONE phase-driven path. The payload
+                    // carries the #22 partial-outcome failure for the inline
+                    // warning.
+                    PostSessionChoiceView(
+                        model: model, completionFailure: completionFailure)
+                case .breakActive:
+                    // The break countdown (issue #23, PRD §14.2): the same
+                    // ONE phase-driven path; the view derives everything
+                    // from the model's break passthroughs.
+                    BreakView(model: model)
+                }
+            }
+            // The break-log warning (issue #23 criterion 18): the small
+            // non-blocking banner for an append failure on the non-blocking
+            // break path — the flow already continued to Tasks; the warning
+            // rides above whatever phase is showing until the next break
+            // clears it.
+            .overlay(alignment: .bottom) {
+                if let warning = model.pendingBreakLogWarning {
+                    Text(warning)
+                        .font(DesignTokens.annotationFont)
+                        .foregroundStyle(DesignTokens.warning)
+                        .padding(.horizontal, DesignTokens.spacingM)
+                        .padding(.vertical, DesignTokens.spacingS)
+                        .background(DesignTokens.bannerBackground)
+                        .cornerRadius(DesignTokens.cornerRadius)
+                        .padding(.bottom, DesignTokens.spacingM)
+                        .transition(.opacity)
                 }
             }
             .task { await model.bootstrap() }

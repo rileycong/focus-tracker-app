@@ -411,6 +411,12 @@ struct SessionStartView: View {
         case .sessionEndingUnresolved:
             return
                 "A session just ended — finish the wrap-up form before starting a new one."
+        case .breakActive:
+            return
+                "A break is running — finish or end the break before starting a session."
+        case .postSessionChoiceActive:
+            return
+                "Choose what's next (start a session or take a break) before starting one here."
         case .vaultNotConfigured:
             return "No vault is configured. Choose a vault folder first."
         case .pendingRecoveryUnresolved:

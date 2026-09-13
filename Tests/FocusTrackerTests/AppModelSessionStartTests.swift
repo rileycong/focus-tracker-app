@@ -515,7 +515,7 @@ final class AppModelSessionStartTests: XCTestCase {
 
     // MARK: - App phase round trip
 
-    func testEndSessionEntersEndingPhaseAndSubmissionReturnsToTasksView()
+    func testEndSessionEntersEndingPhaseAndSubmissionStopsAtPostSessionChoice()
         async throws
     {
         let taskID = UUID()
@@ -531,13 +531,18 @@ final class AppModelSessionStartTests: XCTestCase {
         XCTAssertEqual(model.appPhase, .endingSession(result, context))
         XCTAssertEqual(model.sessionState, .idle)
 
-        // Submission (§12.5) is what returns the app to Tasks.
+        // Submission (§12.5) moves the flow to the #23 post-session choice.
         var form = EndOfSessionFormState()
         form.completedChoice = .no
         form.focusRating = 3
         form.energyRating = 3
         let outcome = try await model.submitEndOfSession(form)
         XCTAssertEqual(outcome, .success)
+        XCTAssertEqual(model.appPhase, .postSessionChoice(completionFailure: nil))
+
+        // The choice's Start Next Session is what returns to Tasks (nothing
+        // auto-starts or auto-opens, issue #23 criterion 4).
+        model.chooseStartNextSession()
         XCTAssertEqual(model.appPhase, .tasksView)
     }
 }

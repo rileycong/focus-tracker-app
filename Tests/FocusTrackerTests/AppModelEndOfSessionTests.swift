@@ -259,7 +259,8 @@ final class AppModelEndOfSessionTests: XCTestCase {
             makeForm(completed: .yes, focus: 4, energy: 2, notes: "Deep work."))
 
         XCTAssertEqual(outcome, .success)
-        XCTAssertEqual(model.appPhase, .tasksView, "submission returns to Tasks")
+        // Issue #23: the flow's exit stops at the post-session choice.
+        XCTAssertEqual(model.appPhase, .postSessionChoice(completionFailure: nil))
         XCTAssertEqual(model.sessionState, .idle)
 
         // Day-file parse-back: ALL §13 fields with correct values.
@@ -300,7 +301,7 @@ final class AppModelEndOfSessionTests: XCTestCase {
             makeForm(completed: .no, focus: 3, energy: 3, notes: "Not finished"))
 
         XCTAssertEqual(outcome, .success)
-        XCTAssertEqual(model.appPhase, .tasksView)
+        XCTAssertEqual(model.appPhase, .postSessionChoice(completionFailure: nil))
         let logged = try await parseBackSession(result)
         XCTAssertEqual(logged.taskCompleted, false)
         XCTAssertEqual(logged.notes, "Not finished")
@@ -350,7 +351,9 @@ final class AppModelEndOfSessionTests: XCTestCase {
         try FileManager.default.removeItem(at: logsPath)
         let retry = try await model.submitEndOfSession(makeForm(completed: .no))
         XCTAssertEqual(retry, .success)
-        XCTAssertEqual(model.appPhase, .tasksView, "retry completes the flow")
+        XCTAssertEqual(
+            model.appPhase, .postSessionChoice(completionFailure: nil),
+            "retry completes the flow (issue #23: at the choice)")
         let logged = try await parseBackSession(result)
         XCTAssertEqual(logged.sessionID, result.sessionID)
         XCTAssertEqual(logged.taskCompleted, false)
@@ -380,8 +383,14 @@ final class AppModelEndOfSessionTests: XCTestCase {
             outcome,
             .completionFailedAfterLog(
                 .vaultChangedExternally(id: taskID, fileName: "Partial task.md")))
-        // The ending state is cleared and the app returns to Tasks.
-        XCTAssertEqual(model.appPhase, .tasksView)
+        // The ending state is cleared; issue #23 routes the flow's exit to
+        // the post-session choice carrying the failure for the inline #22
+        // warning.
+        XCTAssertEqual(
+            model.appPhase,
+            .postSessionChoice(
+                completionFailure: .vaultChangedExternally(
+                    id: taskID, fileName: "Partial task.md")))
         XCTAssertFalse(model.isSessionActive)
 
         // The session IS logged (log-first ordering held).
