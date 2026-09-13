@@ -223,6 +223,17 @@ final class MiniTimerPanelController {
     /// itself is the single restore affordance. `miniaturize` was rejected
     /// because it keeps a Dock tile whose click would fight with the mini
     /// panel's own restore path.
+    ///
+    /// **Why `orderOut` is safe with the single-window `Window` scene
+    /// (issue #30):** ordering out the `Window` scene's only window makes
+    /// AppKit run its last-window-closed termination check (empirically
+    /// verified — see `FocusTrackerAppDelegate` for the full mechanism).
+    /// The check is answered by that app delegate, which returns `false`
+    /// exactly while the mini flag is on, so this `orderOut` keeps the app
+    /// running. The mechanism does not depend on anything set here: no
+    /// swizzle, no window subclass, no window delegate, and the panel is
+    /// configured with `isReleasedWhenClosed = false` (it never goes
+    /// through `close()` anywhere).
     static func hideMainWindow() {
         mainWindow()?.orderOut(nil)
     }
@@ -280,5 +291,81 @@ final class MiniTimerPanelController {
         Self.makePanel(
             defaultVisibleFrame: NSScreen.main?.visibleFrame
                 ?? CGRect(x: 0, y: 0, width: 1440, height: 900))
+    }
+}
+
+/// The SwiftUI-lifecycle app delegate (issue #30). It lives in this file —
+/// the collapse path's fix site and the one file allowed to import AppKit
+/// (the SwiftUI views stay AppKit-free) — and implements exactly ONE hook:
+/// `applicationShouldTerminateAfterLastWindowClosed`.
+///
+/// # Root cause of the mini-mode termination regression (issue #30, pinned)
+/// Collapsing to mini `orderOut`s the main window
+/// (`MiniTimerPanelController.hideMainWindow` — unchanged since #21, and
+/// always `orderOut`, never `close()`; verified across the codebase: no
+/// swizzle, no `NSWindow` subclass, no window delegate, no
+/// `applicationShouldTerminate` hook anywhere). On the pre-#27
+/// `WindowGroup` binary that `orderOut` was harmless; on the single-window
+/// `Window` scene (50e24e8) the app TERMINATES at the same call. The
+/// mechanism, verified empirically with a minimal SwiftUI `Window`-scene
+/// probe app on this machine:
+///
+/// 1. Ordering out the `Window` scene's only window makes AppKit run its
+///    last-window-closed termination check: immediately after the
+///    `orderOut` returns, `applicationShouldTerminateAfterLastWindowClosed`
+///    is consulted, and with the default answer (`true`) the app terminates
+///    (`applicationWillTerminate` fires). A plain `close()` lands on the
+///    same path. In other words, for a `Window` scene the check is driven
+///    by the window leaving the screen, not only by an actual close.
+/// 2. The always-visible floating mini panel does NOT prevent the
+///    termination: `NSPanel`s don't count as the app's "windows" for this
+///    check (classic AppKit utility-app rule), so showing the panel first
+///    does not save the app — the probe terminated with the panel on
+///    screen. `isReleasedWhenClosed` / panel teardown are irrelevant (the
+///    panel was never closed); `hidesOnDeactivate` is `false` on the panel
+///    and no deactivation is involved.
+/// 3. Returning `false` from this delegate method makes the exact same
+///    `orderOut` safe: the consult still happens, the app stays running,
+///    and a later `makeKeyAndOrderFront` restores the window normally
+///    (verified). Explicit termination is NOT blocked by returning `false`:
+///    `NSApp.terminate` (Cmd+Q / app-menu Quit) consults
+///    `applicationShouldTerminate` — deliberately NOT implemented here —
+///    and proceeds normally, so the #27 requirement that quitting is never
+///    blocked (even with the end-of-session sheet up) is untouched.
+///
+/// # Policy (engineer's choice, documented): stay-alive ONLY while mini
+/// The method returns `false` exactly while `model.isMiniTimerActive` is on
+/// — the one state in which the app itself has ordered out its only window
+/// and must keep running. In every other state it returns AppKit's default
+/// `true`, so the pre-#30 `Window`-scene behavior is preserved everywhere
+/// else (in particular, the user closing the window via the red button /
+/// Cmd+W while NOT collapsed still quits the app). A static always-`false`
+/// policy was REJECTED (documented alternative): with a `Window` scene,
+/// dock-click reopen does NOT bring back a window the user closed (probe
+/// verified — the scene window object survives in `NSApp.windows` but is
+/// never re-shown), so a static `false` would create an un-reopenable,
+/// menu-bar-only lingering app after a plain window close. With the
+/// flag-scoped policy the close button can never linger: while collapsed
+/// the main window is already off screen (its close button unreachable and
+/// Cmd+W a no-op — the borderless panel can never become key), and while
+/// not collapsed the default `true` quits, as before.
+///
+/// # Wiring
+/// `FocusTrackerApp` installs this via `@NSApplicationDelegateAdaptor` and
+/// injects the model in its `init`. An unwired (`nil`-model) delegate
+/// fails safe toward AppKit's default (`true` — terminate), i.e. toward
+/// the pre-fix behavior, never toward a silent always-stay-alive.
+@MainActor
+final class FocusTrackerAppDelegate: NSObject, NSApplicationDelegate {
+
+    /// The app model whose `isMiniTimerActive` flag scopes the
+    /// stay-alive policy (see the type documentation). Set once by
+    /// `FocusTrackerApp.init`; `nil` = unwired (fail-safe default `true`).
+    weak var model: AppModel?
+
+    func applicationShouldTerminateAfterLastWindowClosed(
+        _ sender: NSApplication
+    ) -> Bool {
+        !(model?.isMiniTimerActive ?? false)
     }
 }

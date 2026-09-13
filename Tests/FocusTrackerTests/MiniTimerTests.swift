@@ -588,6 +588,97 @@ final class AppModelMiniTimerTests: XCTestCase {
         XCTAssertEqual(model.sessionState, .idle)
     }
 
+    // MARK: - Termination policy (issue #30)
+
+    // The #30 root cause: with the single-window `Window` scene, ordering
+    // out the scene's only window makes AppKit run its
+    // last-window-closed termination check — the mini panel does not count
+    // as a window for it, so with the default answer the app terminates at
+    // exactly the collapse step. The fix pins the policy on
+    // `FocusTrackerAppDelegate`: stay alive (return `false`) EXACTLY while
+    // the mini flag is on. These tests pin the policy decision against the
+    // real `AppModel` mini-mode state (the delegate's own wiring in
+    // `FocusTrackerApp` is not unit-testable — manual re-check on the
+    // rebuilt binary stays with the user, honestly noted on the issue).
+
+    func testTerminationPolicyStaysAliveExactlyWhileCollapsed() async throws {
+        let taskID = UUID()
+        try writeTaskFile("Alpha task", id: taskID)
+        let model = await makeConfiguredModel()
+        _ = try await startRunningSession(on: model, taskID: taskID)
+        let delegate = FocusTrackerAppDelegate()
+        delegate.model = model
+
+        // Not collapsed: AppKit's default answer — a plain window close
+        // (red button / Cmd+W while not in mini mode) still quits, exactly
+        // as on the pre-#30 `Window`-scene behavior.
+        XCTAssertTrue(
+            delegate.applicationShouldTerminateAfterLastWindowClosed(
+                NSApplication.shared),
+            "default terminate policy outside mini mode")
+
+        // Collapsed: the app itself has ordered out its only window — the
+        // policy must keep the app running (the #30 fix).
+        model.collapseToMiniTimer()
+        XCTAssertTrue(model.isMiniTimerActive)
+        XCTAssertFalse(
+            delegate.applicationShouldTerminateAfterLastWindowClosed(
+                NSApplication.shared),
+            "stay alive while the mini panel holds the screen")
+
+        // Restored: back to the default — the close path behaves as before.
+        model.restoreFromMiniTimer()
+        XCTAssertFalse(model.isMiniTimerActive)
+        XCTAssertTrue(
+            delegate.applicationShouldTerminateAfterLastWindowClosed(
+                NSApplication.shared),
+            "default terminate policy after restore")
+
+        // A second collapse flips the policy again (the round trip is
+        // stateless — the answer tracks only the live flag).
+        model.collapseToMiniTimer()
+        XCTAssertFalse(
+            delegate.applicationShouldTerminateAfterLastWindowClosed(
+                NSApplication.shared))
+    }
+
+    func testTerminationPolicyAfterEndFromMiniReturnsToDefault() async throws {
+        let taskID = UUID()
+        try writeTaskFile("Alpha task", id: taskID)
+        let model = await makeConfiguredModel()
+        _ = try await startRunningSession(on: model, taskID: taskID)
+        let delegate = FocusTrackerAppDelegate()
+        delegate.model = model
+
+        model.collapseToMiniTimer()
+        XCTAssertFalse(
+            delegate.applicationShouldTerminateAfterLastWindowClosed(
+                NSApplication.shared))
+
+        // End-from-mini clears the flag (the panel closes by any end path,
+        // #21 criterion 5) and the sync's pinned order restores the main
+        // window BEFORE dismissing the panel — so by the time the panel
+        // goes away the flag is already off and a regular window is visible
+        // again; the policy must be back on AppKit's default, never stuck
+        // in (or consulted from) a stay-alive state after the session ends.
+        _ = try model.endSession()
+        XCTAssertFalse(model.isMiniTimerActive)
+        XCTAssertTrue(
+            delegate.applicationShouldTerminateAfterLastWindowClosed(
+                NSApplication.shared),
+            "default terminate policy once the session has ended")
+    }
+
+    func testTerminationPolicyWithUnwiredModelFailsSafeToTerminate() {
+        // No model injected: AppKit's default `true` — fail-safe toward the
+        // pre-fix behavior, never toward a silent always-stay-alive (see
+        // `FocusTrackerAppDelegate`'s wiring documentation).
+        let delegate = FocusTrackerAppDelegate()
+        XCTAssertTrue(
+            delegate.applicationShouldTerminateAfterLastWindowClosed(
+                NSApplication.shared))
+    }
+
     // MARK: - Session-number snapshot plumbing (issue #21 criterion 2)
 
     func testSessionNumberSnapshotIsLiftedAndResetPerSession() async throws {

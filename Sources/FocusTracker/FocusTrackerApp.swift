@@ -7,6 +7,16 @@ struct FocusTrackerApp: App {
     /// surface, created over the model and driven purely from the observable
     /// state by `syncMiniPanel()` below.
     @State private var miniPanel: MiniTimerPanelController
+    /// The SwiftUI-lifecycle app delegate (issue #30): its
+    /// `applicationShouldTerminateAfterLastWindowClosed` returns `false`
+    /// exactly while the mini flag is on, so collapsing (which `orderOut`s
+    /// the `Window` scene's only window) no longer terminates the app. See
+    /// `FocusTrackerAppDelegate` for the pinned root-cause mechanism. It
+    /// implements no other hook — in particular no
+    /// `applicationShouldTerminate`, so Cmd+Q stays the default unblocked
+    /// terminate path (#27).
+    @NSApplicationDelegateAdaptor(FocusTrackerAppDelegate.self)
+    private var appDelegate: FocusTrackerAppDelegate
 
     init() {
         // The vault path lives in the app's UserDefaults suite; the suite
@@ -20,6 +30,7 @@ struct FocusTrackerApp: App {
         }
         _model = State(initialValue: AppModel(settings: settings))
         _miniPanel = State(initialValue: MiniTimerPanelController(model: _model.wrappedValue))
+        appDelegate.model = _model.wrappedValue
     }
 
     var body: some Scene {
@@ -71,16 +82,18 @@ struct FocusTrackerApp: App {
                     // touches it.
                     //
                     // Quit is NOT blocked while this modal is up (#27,
-                    // verified): there is no `NSApplicationDelegate` and no
-                    // `applicationShouldTerminate` anywhere in the app (the
-                    // only AppKit surface is the #21 mini panel, which adds
-                    // none), and this is a plain SwiftUI sheet — AppKit's
-                    // default terminate path ends the app normally on
-                    // Cmd+Q / app-menu Quit with the sheet showing. No
-                    // quit-confirmation dialog is added; quitting may lose
-                    // the unsubmitted session (the documented §18
-                    // honest-loss window on `.endingSession`) — the
-                    // criterion is only that quitting is not BLOCKED.
+                    // verified): the modal is a plain SwiftUI sheet and
+                    // nothing hooks `applicationShouldTerminate` — the one
+                    // app delegate (#30) answers only the
+                    // last-window-closed policy (AppKit default `true`
+                    // unless mini-collapsed) and stays out of the explicit
+                    // terminate path — AppKit's default terminate path ends
+                    // the app normally on Cmd+Q / app-menu Quit with the
+                    // sheet showing. No quit-confirmation dialog is added;
+                    // quitting may lose the unsubmitted session (the
+                    // documented §18 honest-loss window on
+                    // `.endingSession`) — the criterion is only that
+                    // quitting is not BLOCKED.
                     // Amendment (#27): with the single-window scene above,
                     // the "stuck" experience is impossible three ways —
                     // Discard escapes a failed append, there is no second
@@ -144,16 +157,25 @@ struct FocusTrackerApp: App {
     /// - **Collapse** (`.timerView` + `isMiniTimerActive`): show the mini
     ///   panel without stealing focus, then `orderOut` the main window (the
     ///   pinned choice over `miniaturize` — see
-    ///   `MiniTimerPanelController.hideMainWindow`).
-    /// - **Restore** (`.timerView`, flag off): dismiss the panel and orderFront
-    ///   the main window — the full `.timerView(context)` display is intact
-    ///   (the phase never left `.timerView`, so no content was torn down).
+    ///   `MiniTimerPanelController.hideMainWindow`). The `orderOut` makes
+    ///   AppKit run its last-window-closed termination check (#30, mechanism
+    ///   on `FocusTrackerAppDelegate`); the flag is already on here, so the
+    ///   delegate answers `false` and the app stays running.
+    /// - **Restore** (`.timerView`, flag off): orderFront the main window
+    ///   FIRST, then dismiss the panel (issue #30 pinned order — the swap's
+    ///   two halves run inside one sync so the visual difference is
+    ///   imperceptible): a regular window is visible again before the
+    ///   panel's `orderOut`, so the panel can never be the "last window" in
+    ///   AppKit's termination check while the flag is already off — the
+    ///   end-from-mini path cannot trip the check. The full
+    ///   `.timerView(context)` display is intact (the phase never left
+    ///   `.timerView`, so no content was torn down).
     /// - **Any end path** (`.endingSession` while the required modal is up,
-    ///   then `.tasksView` after submission): dismiss the panel and bring
-    ///   the main window back — covers End-from-mini (the window was
-    ///   hidden; the restored main window shows the timer with the #22
-    ///   modal over it) and End-from-full (already visible; the extra
-    ///   orderFront is a harmless no-op).
+    ///   then `.tasksView` after submission): bring the main window back and
+    ///   dismiss the panel — covers End-from-mini (the window was hidden;
+    ///   the restored main window shows the timer with the #22 modal over
+    ///   it) and End-from-full (already visible; the extra orderFront is a
+    ///   harmless no-op).
     ///
     /// No persistence of mini state: the app quitting takes the panel with
     /// it, and a relaunch starts on the full view (`isMiniTimerActive` is
@@ -164,8 +186,8 @@ struct FocusTrackerApp: App {
             miniPanel.show(context: context)
             MiniTimerPanelController.hideMainWindow()
         } else {
-            miniPanel.dismiss()
             MiniTimerPanelController.showMainWindow()
+            miniPanel.dismiss()
         }
     }
 }

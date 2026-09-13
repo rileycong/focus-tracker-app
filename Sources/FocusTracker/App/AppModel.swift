@@ -307,10 +307,12 @@ public final class AppModel {
         /// confirm — so an app quit while the modal is up loses the
         /// unsubmitted session. The modal is app-modal and blocking.
         /// Quitting is NOT blocked while this phase is up (#27, verified):
-        /// there is no `NSApplicationDelegate`/`applicationShouldTerminate`
-        /// anywhere in the app, the modal is a plain SwiftUI sheet, and the
-        /// app is single-window (#27 amendment) — the default AppKit
-        /// terminate path ends the app normally on Cmd+Q.
+        /// nothing implements `applicationShouldTerminate` — the one app
+        /// delegate (#30) answers only the last-window-closed policy
+        /// (AppKit default `true` unless mini-collapsed) — the modal is a
+        /// plain SwiftUI sheet, and the app is single-window (#27
+        /// amendment) — the default AppKit terminate path ends the app
+        /// normally on Cmd+Q.
         case endingSession(FocusSessionResult, ActiveSessionSnapshot, SessionContext)
         /// The post-submission choice (issue #23, PRD §14.1, §20.7): after a
         /// submission that leaves the end-of-session modal — BOTH
