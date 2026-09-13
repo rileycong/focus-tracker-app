@@ -74,6 +74,26 @@ final class AppModelBreakTests: XCTestCase {
 
     private struct TestFailure: Error {}
 
+    /// The #29 `.endingSession` phase carries the end-instant snapshot
+    /// between the result and the context; these pre-#29 assertions match
+    /// result + context and verify the snapshot's session identity (its
+    /// exact fields are pinned by the #29 tests).
+    private func assertEndingPhase(
+        _ phase: AppModel.AppPhase, result: FocusSessionResult,
+        context: SessionContext,
+        file: StaticString = #filePath, line: UInt = #line
+    ) {
+        guard case .endingSession(let retained, let snapshot, let retainedContext) = phase else {
+            XCTFail("expected .endingSession(...), got \(phase)", file: file, line: line)
+            return
+        }
+        XCTAssertEqual(retained, result, file: file, line: line)
+        XCTAssertEqual(retainedContext, context, file: file, line: line)
+        XCTAssertEqual(
+            snapshot.sessionID, result.sessionID, "snapshot identity",
+            file: file, line: line)
+    }
+
     private func makeConfiguredModel() async -> AppModel {
         settings.vaultPath = vaultURL.path(percentEncoded: false)
         let model = AppModel(
@@ -223,9 +243,8 @@ final class AppModelBreakTests: XCTestCase {
         if case .postSessionChoice = model.appPhase {
             XCTFail("the choice must NOT appear after .logAppendFailed")
         }
-        XCTAssertEqual(
-            model.appPhase, .endingSession(result, context),
-            "the ending state is retained for retry (the modal stays up)")
+        // The ending state is retained for retry (the modal stays up).
+        assertEndingPhase(model.appPhase, result: result, context: context)
         try FileManager.default.removeItem(at: logsPath)
 
         // Retry succeeds → the choice appears.

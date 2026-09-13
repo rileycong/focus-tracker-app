@@ -66,6 +66,26 @@ final class AppModelSessionStartTests: XCTestCase {
 
     // MARK: - Helpers
 
+    /// The #29 `.endingSession` phase carries the end-instant snapshot
+    /// between the result and the context; these pre-#29 assertions match
+    /// result + context and verify the snapshot's session identity (its
+    /// exact fields are pinned by the #29 tests).
+    private func assertEndingPhase(
+        _ phase: AppModel.AppPhase, result: FocusSessionResult,
+        context: SessionContext,
+        file: StaticString = #filePath, line: UInt = #line
+    ) {
+        guard case .endingSession(let retained, let snapshot, let retainedContext) = phase else {
+            XCTFail("expected .endingSession(...), got \(phase)", file: file, line: line)
+            return
+        }
+        XCTAssertEqual(retained, result, file: file, line: line)
+        XCTAssertEqual(retainedContext, context, file: file, line: line)
+        XCTAssertEqual(
+            snapshot.sessionID, result.sessionID, "snapshot identity",
+            file: file, line: line)
+    }
+
     private func makeConfiguredModel() async -> AppModel {
         settings.vaultPath = vaultURL.path(percentEncoded: false)
         let model = AppModel(
@@ -394,9 +414,8 @@ final class AppModelSessionStartTests: XCTestCase {
         XCTAssertEqual(model.appPhase, .timerView(context))
         let result = try model.endSession()
         XCTAssertEqual(result.taskID, context.taskID)
-        XCTAssertEqual(
-            model.appPhase, .endingSession(result, context),
-            "end enters the #22 required ending phase")
+        // End enters the #22 required ending phase.
+        assertEndingPhase(model.appPhase, result: result, context: context)
     }
 
     func testAdHocSessionValidationRefusalsAreTyped() async throws {
@@ -536,7 +555,7 @@ final class AppModelSessionStartTests: XCTestCase {
 
         // Confirm: the phase holds the result + context until submission.
         let result = try model.endSession()
-        XCTAssertEqual(model.appPhase, .endingSession(result, context))
+        assertEndingPhase(model.appPhase, result: result, context: context)
         XCTAssertEqual(model.sessionState, .idle)
 
         // Submission (§12.5) moves the flow to the #23 post-session choice.

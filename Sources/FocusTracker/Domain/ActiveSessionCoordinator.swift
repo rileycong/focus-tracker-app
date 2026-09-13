@@ -175,6 +175,19 @@ public final class ActiveSessionCoordinator: @unchecked Sendable {
         lock.withLock { engine.isActive }
     }
 
+    /// See `FocusSessionEngine.captureSnapshot()` — the pure end-instant
+    /// state read (issue #29): `nil` when idle. A READ-ONLY passthrough with
+    /// NO persistence side effects: unlike the cadence saves (start/pause/
+    /// resume/tick) it never writes the snapshot to disk — the #29 end flow
+    /// calls it exactly once, BEFORE `end()` (after end the engine is idle
+    /// and this returns `nil` — order matters), to retain the exact
+    /// `is_paused`/second-precision-accumulator/pause-count/configured-
+    /// `duration` state alongside the `FocusSessionResult` for a possible
+    /// Cancel-restore (`restore(from:)` reuses the #13 path unchanged).
+    public func captureSnapshot() -> ActiveSessionSnapshot? {
+        lock.withLock { engine.captureSnapshot() }
+    }
+
     /// See `FocusSessionEngine.focusedSeconds(at:)`.
     public func focusedSeconds(at now: TimeInterval) -> TimeInterval {
         lock.withLock { engine.focusedSeconds(at: now) }

@@ -166,6 +166,26 @@ final class AppModelEndOfSessionTests: XCTestCase {
         return form
     }
 
+    /// The #29 `.endingSession` phase carries the end-instant snapshot
+    /// between the result and the context; these pre-#29 assertions match
+    /// result + context and verify the snapshot's session identity (its
+    /// exact fields are pinned by the #29 tests).
+    private func assertEndingPhase(
+        _ phase: AppModel.AppPhase, result: FocusSessionResult,
+        context: SessionContext,
+        file: StaticString = #filePath, line: UInt = #line
+    ) {
+        guard case .endingSession(let retained, let snapshot, let retainedContext) = phase else {
+            XCTFail("expected .endingSession(...), got \(phase)", file: file, line: line)
+            return
+        }
+        XCTAssertEqual(retained, result, file: file, line: line)
+        XCTAssertEqual(retainedContext, context, file: file, line: line)
+        XCTAssertEqual(
+            snapshot.sessionID, result.sessionID, "snapshot identity",
+            file: file, line: line)
+    }
+
     private func startRunningSession(
         on model: AppModel, taskID: UUID, file: StaticString = #filePath,
         line: UInt = #line
@@ -222,7 +242,7 @@ final class AppModelEndOfSessionTests: XCTestCase {
         XCTAssertEqual(result.pausedDuration, 5)
         XCTAssertEqual(result.pauseCount, 1)
         // The phase holds the result PLUS the session context.
-        XCTAssertEqual(model.appPhase, .endingSession(result, context))
+        assertEndingPhase(model.appPhase, result: result, context: context)
         // sessionState is idle from the confirm instant; engine closed.
         XCTAssertEqual(model.sessionState, .idle)
         XCTAssertFalse(model.isSessionActive)
@@ -342,7 +362,7 @@ final class AppModelEndOfSessionTests: XCTestCase {
                 .path(percentEncoded: false))
         // The ending state is RETAINED (the modal stays up for retry): the
         // in-memory result is the only copy of the session.
-        XCTAssertEqual(model.appPhase, .endingSession(result, context))
+        assertEndingPhase(model.appPhase, result: result, context: context)
         XCTAssertFalse(model.isSessionActive)
         // Nothing was written — the obstruction is untouched.
         XCTAssertEqual(try Data(contentsOf: logsPath), obstruction)
@@ -395,7 +415,7 @@ final class AppModelEndOfSessionTests: XCTestCase {
         try writeTaskFile("Discard task", id: taskID, in: vaultURL)
         let model = await makeConfiguredModel()
         let (result, context) = try await runSessionToEnd(on: model, taskID: taskID)
-        XCTAssertEqual(model.appPhase, .endingSession(result, context))
+        assertEndingPhase(model.appPhase, result: result, context: context)
 
         model.discardEndOfSession()
 
@@ -429,7 +449,8 @@ final class AppModelEndOfSessionTests: XCTestCase {
         guard case .logAppendFailed = outcome else {
             return XCTFail("expected .logAppendFailed, got \(String(describing: outcome))")
         }
-        XCTAssertEqual(model.appPhase, .endingSession(result, context), "trapped")
+        // Trapped: the ending state is retained for retry.
+        assertEndingPhase(model.appPhase, result: result, context: context)
 
         // The escape hatch: the confirmed discard drops the result, writes
         // nothing, and returns to Tasks.
@@ -511,7 +532,7 @@ final class AppModelEndOfSessionTests: XCTestCase {
         // Nothing started; the ending phase is untouched.
         XCTAssertFalse(model.isSessionActive)
         XCTAssertEqual(model.sessionState, .idle)
-        XCTAssertEqual(model.appPhase, .endingSession(result, context))
+        assertEndingPhase(model.appPhase, result: result, context: context)
         let tasksOnDisk = try await VaultStore(vaultURL: vaultURL).load()
         guard case .loaded(let inventory) = tasksOnDisk else {
             XCTFail("expected a loaded vault")
@@ -540,7 +561,7 @@ final class AppModelEndOfSessionTests: XCTestCase {
         XCTAssertEqual(model.vaultURL, vaultURL)
         XCTAssertEqual(
             settings.vaultPath, vaultURL.path(percentEncoded: false))
-        XCTAssertEqual(model.appPhase, .endingSession(result, context))
+        assertEndingPhase(model.appPhase, result: result, context: context)
     }
 
     // MARK: - notes-empty → nil in the file (issue criterion 16)

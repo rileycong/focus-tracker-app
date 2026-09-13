@@ -359,6 +359,26 @@ final class AppModelMiniTimerTests: XCTestCase {
 
     // MARK: - Helpers
 
+    /// The #29 `.endingSession` phase carries the end-instant snapshot
+    /// between the result and the context; these pre-#29 assertions match
+    /// result + context and verify the snapshot's session identity (its
+    /// exact fields are pinned by the #29 tests).
+    private func assertEndingPhase(
+        _ phase: AppModel.AppPhase, result: FocusSessionResult,
+        context: SessionContext,
+        file: StaticString = #filePath, line: UInt = #line
+    ) {
+        guard case .endingSession(let retained, let snapshot, let retainedContext) = phase else {
+            XCTFail("expected .endingSession(...), got \(phase)", file: file, line: line)
+            return
+        }
+        XCTAssertEqual(retained, result, file: file, line: line)
+        XCTAssertEqual(retainedContext, context, file: file, line: line)
+        XCTAssertEqual(
+            snapshot.sessionID, result.sessionID, "snapshot identity",
+            file: file, line: line)
+    }
+
     private func makeConfiguredModel() async -> AppModel {
         settings.vaultPath = vaultURL.path(percentEncoded: false)
         let model = AppModel(
@@ -542,7 +562,7 @@ final class AppModelMiniTimerTests: XCTestCase {
         // #22: the confirm enters the REQUIRED `.endingSession` phase (the
         // modal over the restored main window) — not a direct return to
         // Tasks — holding the result plus the session context.
-        XCTAssertEqual(model.appPhase, .endingSession(result, context))
+        assertEndingPhase(model.appPhase, result: result, context: context)
         XCTAssertTrue(model.isMiniTimerActive == false, "mini cleared")
         XCTAssertNil(model.sessionNumberToday, "stale snapshot cleared")
         // The on-disk active-session snapshot was cleared by the end.
@@ -564,7 +584,7 @@ final class AppModelMiniTimerTests: XCTestCase {
         let result = try model.endSession()
 
         XCTAssertFalse(model.isMiniTimerActive)
-        XCTAssertEqual(model.appPhase, .endingSession(result, context))
+        assertEndingPhase(model.appPhase, result: result, context: context)
         XCTAssertEqual(model.sessionState, .idle)
     }
 

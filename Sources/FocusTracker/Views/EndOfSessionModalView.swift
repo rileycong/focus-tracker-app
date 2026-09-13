@@ -3,9 +3,13 @@ import SwiftUI
 /// The blocking end-of-session modal (issue #22, PRD §12): shown over the
 /// full timer exactly while `AppPhase.endingSession` is active — presented
 /// by the app shell (the ONE presentation path; this view never presents
-/// itself). Submission is REQUIRED (§12.5): interactive dismissal is
-/// disabled and the phase only leaves `.endingSession` through
-/// `AppModel.submitEndOfSession`.
+/// itself). The phase only leaves `.endingSession` through
+/// `AppModel.submitEndOfSession`, `AppModel.cancelEndOfSession` (#29) or
+/// `AppModel.discardEndOfSession` (#27). Interactive dismissal stays
+/// disabled: the flow resolves only through an explicit control, and the
+/// #29 Cancel BUTTON is the way back — Esc is deliberately kept dead (no
+/// `.keyboardShortcut(.cancelAction)`), matching the pre-#29 modal where
+/// Esc did nothing.
 ///
 /// # Fields (§12.1–§12.4, exact)
 /// **Completed task?** Yes/No selectable buttons — no default selected, the
@@ -15,8 +19,8 @@ import SwiftUI
 /// submit button binds to; this view holds no logic of its own.
 ///
 /// # Outcomes
-/// - `.success` — the phase moved to `.tasksView`; the sheet leaves with the
-///   app-shell branch swap.
+/// - `.success` — the phase moved to `.postSessionChoice` (#23); the sheet
+///   leaves with the app-shell branch swap.
 /// - `.logAppendFailed` — nothing was written; the ending state is retained
 ///   (the phase is untouched, the sheet stays up) and the failure is
 ///   surfaced inline for retry. The modal is never a trap (issue #27): a
@@ -29,6 +33,13 @@ import SwiftUI
 /// - `.completionFailedAfterLog` — the documented partial outcome: the
 ///   session IS logged, the status is NOT updated; the app returns to Tasks,
 ///   where the user can complete the task manually in the UI.
+/// - **Cancel** (issue #29) — closes the modal WITHOUT logging and resumes
+///   the session: the retained result is discarded as a log (nothing is
+///   appended) and the session is restored from the end-instant snapshot
+///   (`AppModel.cancelEndOfSession`, the #13 restore path) — running-at-end
+///   keeps running (modal time counts as nothing), paused-at-end comes back
+///   paused. The phase returns to `.timerView` and the sheet leaves with
+///   the branch swap.
 struct EndOfSessionModalView: View {
     /// The retained engine result — the §13 log's timing fields.
     let result: FocusSessionResult
@@ -78,6 +89,13 @@ struct EndOfSessionModalView: View {
                     }
                 }
                 Spacer()
+                // Issue #29: the way back from the modal WITHOUT logging —
+                // styled as the calm secondary action beside Save (tokens:
+                // the bordered style the flow's other non-destructive
+                // controls use). Always enabled: Cancel is valid in every
+                // modal state, including a failed append.
+                Button("Cancel", action: cancel)
+                    .buttonStyle(.bordered)
                 Button("Save session", action: submit)
                     .buttonStyle(.borderedProminent)
                     .disabled(!form.isSubmittable)
@@ -197,6 +215,27 @@ struct EndOfSessionModalView: View {
                 // silently dropped.
                 submissionFailureText = String(describing: error)
             }
+        }
+    }
+
+    /// The modal's Cancel (issue #29): un-ends the session via
+    /// `AppModel.cancelEndOfSession()` — the retained result is discarded
+    /// as a log (nothing is appended) and the session is restored from the
+    /// captured end-instant snapshot (the #13 restore path; running-at-end
+    /// → re-anchored running, paused-at-end → restored paused). The phase
+    /// returns to `.timerView` and this sheet leaves with the app-shell
+    /// branch swap. Esc is deliberately NOT wired to this (pinned: keep
+    /// Esc disabled — the sheet's `interactiveDismissDisabled` stays and no
+    /// `.cancelAction` shortcut is added); this button is the affordance.
+    /// The only possible throw (`restore`'s `.sessionAlreadyActive`) is
+    /// impossible from this state (the engine has been idle since confirm)
+    /// but is surfaced inline, never swallowed.
+    private func cancel() {
+        submissionFailureText = nil
+        do {
+            try model.cancelEndOfSession()
+        } catch {
+            submissionFailureText = String(describing: error)
         }
     }
 

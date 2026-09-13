@@ -103,6 +103,15 @@ import Observation
 /// in the modal drops the unsubmitted result, honest §18 loss, nothing
 /// written) and reconciles the composed log's whole-minute fields so the
 /// append check passes for ANY session (see `EndOfSessionFormState.makeLog`).
+/// Issue #29 adds the modal's Cancel: `endSession()` captures the
+/// end-instant engine snapshot via a read-only coordinator passthrough
+/// BEFORE `coordinator.end()` and retains it in the `.endingSession` phase
+/// payload; `cancelEndOfSession()` discards the retained result as a log
+/// (nothing appended) and restores the session through the #13
+/// `coordinator.restore(from:)` path — running-at-end re-anchored running
+/// (modal time counts as nothing), paused-at-end restored paused (modal
+/// time lands in paused, never focused) — with the pinned ordering
+/// restore → state updates → phase swap so no guard-gap exists.
 ///
 /// # Break flow (issue #23, PRD §14)
 /// The opt-in break behind the post-submission choice: `takeBreak(duration:)`
@@ -267,20 +276,42 @@ public final class AppModel {
         /// underneath. The app shell presents the end-of-session modal for
         /// exactly this phase — ONE presentation path.
         ///
+        /// The middle payload member is the #29 end-instant snapshot,
+        /// captured via the coordinator's read-only `captureSnapshot()`
+        /// BEFORE `coordinator.end()` (after end the engine is idle and
+        /// capture returns `nil` — order matters). It retains the exact
+        /// pause state at end (`isPaused`), the second-precision
+        /// accumulators, the pause count and the configured `duration` —
+        /// none of which `FocusSessionResult` carries — so the modal's
+        /// Cancel can restore the session faithfully via the #13
+        /// `restore(from:)` path. **Rejected alternatives (documented,
+        /// issue #29):** adding `is_paused_at_end` to the result (ripples
+        /// the #12 result shape and still lacks the configured duration —
+        /// the result carries only rounded minutes), and synthesizing a
+        /// snapshot from the result alone (loses `duration` and second
+        /// precision; restoring from rounded minutes would inject rounding
+        /// error into a live session). The ≈0 time between the capture and
+        /// the end is absorbed by the restore re-anchor on Cancel. The
+        /// snapshot is DROPPED — never restorable — when the phase leaves
+        /// `.endingSession` by submission (the payload is replaced by
+        /// `.postSessionChoice`) AND by #27's discard (replaced by
+        /// `.tasksView`).
+        ///
         /// Submission is REQUIRED (§12.5): the phase stays here until
         /// `submitEndOfSession` lands (success or the typed partial
-        /// outcome); while it lasts, `startSession`/`startAdHocSession`
-        /// refuse with `.sessionEndingUnresolved` and `setVaultPath`
-        /// refuses. **Honest loss window (documented, accepted v1):** the
-        /// result lives only in memory — the snapshot was already cleared
-        /// at confirm — so an app quit while the modal is up loses the
+        /// outcome) or `cancelEndOfSession` (#29) restores the session;
+        /// while it lasts, `startSession`/`startAdHocSession` refuse with
+        /// `.sessionEndingUnresolved` and `setVaultPath` refuses.
+        /// **Honest loss window (documented, accepted v1):** the result
+        /// lives only in memory — the snapshot was already cleared at
+        /// confirm — so an app quit while the modal is up loses the
         /// unsubmitted session. The modal is app-modal and blocking.
         /// Quitting is NOT blocked while this phase is up (#27, verified):
         /// there is no `NSApplicationDelegate`/`applicationShouldTerminate`
         /// anywhere in the app, the modal is a plain SwiftUI sheet, and the
         /// app is single-window (#27 amendment) — the default AppKit
         /// terminate path ends the app normally on Cmd+Q.
-        case endingSession(FocusSessionResult, SessionContext)
+        case endingSession(FocusSessionResult, ActiveSessionSnapshot, SessionContext)
         /// The post-submission choice (issue #23, PRD §14.1, §20.7): after a
         /// submission that leaves the end-of-session modal — BOTH
         /// `.success` and the typed `.completionFailedAfterLog` partial
@@ -1253,32 +1284,49 @@ public final class AppModel {
         sessionState = .running
     }
 
-    /// The confirm-End step of the end flow (issue #22, PRD §9.5 → §12):
-    /// runs the coordinator end (engine result + the #13 clear-on-end
-    /// snapshot wipe — verified by the coordinator's contract, and the
-    /// submission adds no snapshot and clears nothing), flips
-    /// `sessionState` to `.idle` from the confirm instant, clears the
+    /// The confirm-End step of the end flow (issue #22, PRD §9.5 → §12;
+    /// extended by issue #29): captures the end-instant snapshot FIRST — the
+    /// coordinator's read-only `captureSnapshot()` passthrough, a pure engine
+    /// read (after end the engine is idle and capture returns `nil`, so the
+    /// order is pinned) — then runs the coordinator end (engine result + the
+    /// #13 clear-on-end snapshot wipe — verified by the coordinator's
+    /// contract, and the submission adds no snapshot and clears nothing),
+    /// flips `sessionState` to `.idle` from the confirm instant, clears the
     /// mini-mode flag (the panel closes on a session end **by any path**,
-    /// issue #21 criterion 5) and the #20 session-number snapshot, and
-    /// swaps the phase to `.endingSession(result, context)` — the REQUIRED
-    /// end-of-session modal over the timer (presented by the app shell;
-    /// ending from mini restores the main window with the modal over it).
-    /// Only `submitEndOfSession` leaves `.endingSession`.
+    /// issue #21 criterion 5) and the #20 session-number snapshot, and swaps
+    /// the phase to `.endingSession(result, snapshot, context)` — the
+    /// REQUIRED end-of-session modal over the timer (presented by the app
+    /// shell; ending from mini restores the main window with the modal over
+    /// it). The retained snapshot is what Cancel (#29) restores from; the
+    /// ≈0 time between capture and end is absorbed by the restore re-anchor.
+    /// Only `submitEndOfSession`, `cancelEndOfSession` (#29) and
+    /// `discardEndOfSession` (#27) leave `.endingSession`.
     ///
     /// - Throws: `FocusSessionError.noActiveSession` when there is no
     ///   `.timerView` phase to end (the End control only exists on the
     ///   active-session timer view, so this is a caller contract
     ///   violation — nothing was ended) or the engine's own end error.
+    ///   The same idle condition is mirrored on the capture itself (a nil
+    ///   snapshot with an open `.timerView` phase is the same contract
+    ///   violation — thrown, never a silent nil payload).
     @discardableResult
     public func endSession() throws -> FocusSessionResult {
         guard case .timerView(let context) = appPhase else {
+            throw FocusSessionError.noActiveSession
+        }
+        // Issue #29 pinned capture order: BEFORE coordinator.end() — after
+        // end the engine is idle and capture returns nil. `FocusSessionResult`
+        // carries neither the pause state nor the configured duration, so
+        // the snapshot is the only faithful restore source (rejected
+        // alternatives documented on `AppPhase.endingSession`).
+        guard let snapshot = coordinator.captureSnapshot() else {
             throw FocusSessionError.noActiveSession
         }
         let result = try coordinator.end()
         sessionState = .idle
         isMiniTimerActive = false
         sessionNumberToday = nil
-        appPhase = .endingSession(result, context)
+        appPhase = .endingSession(result, snapshot, context)
         return result
     }
 
@@ -1355,7 +1403,7 @@ public final class AppModel {
     func submitEndOfSession(
         _ form: EndOfSessionFormState
     ) async throws -> EndOfSessionOutcome? {
-        guard case .endingSession(let result, _) = appPhase, form.isSubmittable,
+        guard case .endingSession(let result, _, _) = appPhase, form.isSubmittable,
             let store = vaultStore, let logs = dailyLogStore
         else {
             return nil
@@ -1390,9 +1438,10 @@ public final class AppModel {
             await mirrorSyncedInventory(from: store)
         }
 
-        // Step 4: the ending state is cleared; the flow stops at the #23
-        // post-session choice (Start Next Session / Take Break — nothing
-        // auto-starts).
+        // Step 4: the ending state is cleared — including the #29 retained
+        // snapshot, which is DROPPED here (never restorable once logged);
+        // the flow stops at the #23 post-session choice (Start Next Session
+        // / Take Break — nothing auto-starts).
         appPhase = .postSessionChoice(completionFailure: nil)
         return .success
     }
@@ -1411,8 +1460,9 @@ public final class AppModel {
 
     /// The #27 escape hatch for a `.logAppendFailed`-trapped modal: drops
     /// the whole unsubmitted end-of-session flow — the in-memory result is
-    /// DISCARDED and the phase moves to `.tasksView`. Nothing is written to
-    /// any log (no day file is read, created or modified).
+    /// DISCARDED (together with the #29 retained snapshot, so nothing is
+    /// restorable afterwards) and the phase moves to `.tasksView`. Nothing
+    /// is written to any log (no day file is read, created or modified).
     ///
     /// **Honest §18 loss, documented inline (and surfaced in the modal's
     /// typed confirm):** the in-memory result is the ONLY copy of the
@@ -1428,6 +1478,97 @@ public final class AppModel {
     func discardEndOfSession() {
         guard case .endingSession = appPhase else { return }
         appPhase = .tasksView
+    }
+
+    // MARK: - Cancel on the end-of-session modal (issue #29, un-ending)
+
+    /// The typed outcome of the modal Cancel (issue #29; `Equatable` for
+    /// exact-case assertions — house style).
+    public enum EndOfSessionCancelOutcome: Equatable, Sendable {
+        /// The session was restored from the captured end-instant snapshot:
+        /// the engine is live again (same session, re-anchored at the
+        /// restore instant) and the phase is `.timerView(context)`.
+        case restored
+        /// Typed no-op outside `.endingSession` (the control only exists in
+        /// the modal — the `chooseStartNextSession` guard precedent). Also
+        /// the outcome after the snapshot was dropped by a submission or a
+        /// #27 discard: the phase has left `.endingSession`, so there is
+        /// nothing to cancel and nothing restorable.
+        case noEndingSession
+    }
+
+    /// The modal's **Cancel** (issue #29): un-ends the session — the
+    /// retained `FocusSessionResult` is discarded AS A LOG (nothing is ever
+    /// appended by this path) and the session is restored from the
+    /// end-instant snapshot retained in the phase payload, reusing the #13
+    /// `restore(from:)` path UNCHANGED (not a fork): same `session_id`, same
+    /// `started_at`, same second-precision accumulators, same pause count,
+    /// same configured duration, same phase.
+    ///
+    /// **Pinned ordering (issue #29 — no window where both guards are
+    /// passable):** restore FIRST → `sessionState` update → phase swap.
+    /// While `.endingSession` is up, starts refuse via
+    /// `.sessionEndingUnresolved` (engine idle, phase guard); the restore
+    /// re-opens the engine BEFORE the phase leaves `.endingSession`, so
+    /// after Cancel starts refuse via the ordinary already-active-session
+    /// guard (`.sessionAlreadyActive`) — there is no instant where the
+    /// phase has left `.endingSession` while the engine is still idle.
+    ///
+    /// **Modal-time mechanic (pinned, consistent with #12's segment
+    /// semantics and the UI's Pause/Resume state):** the captured phase is
+    /// restored FAITHFULLY.
+    /// - Running-at-end → restored RUNNING: `restore` re-anchors the open
+    ///   run segment at the restore instant, so the modal time counts as
+    ///   NOTHING (neither focused nor paused) and the clock continues
+    ///   growing focused time from there.
+    /// - Paused-at-end → restored PAUSED (the UI shows Resume): the open
+    ///   pause segment re-anchors at the restore instant, so the time until
+    ///   the user resumes lands in PAUSED time per #12's open-pause-segment
+    ///   semantics — NEVER focused. (Rejected: always restore running —
+    ///   contradicts the captured phase and the button state.)
+    /// Both paths satisfy the pinned invariant: time spent on the modal
+    /// never counts as focused.
+    ///
+    /// **Side effects (per the #13 cadence, not forked):** the coordinator's
+    /// `restore` re-arms the autosave chain; the snapshot is re-persisted by
+    /// the cadence itself (the next tick, ≤ 1 autosave interval after the
+    /// restore — the same honest-loss bound as any other save point).
+    ///
+    /// **Not re-fetched (already correct, documented):** `sessionNumberToday`
+    /// is deliberately untouched — `endSession()` cleared it, and the #21
+    /// view-driven once-on-appear fetch of the restored `.timerView` owns
+    /// the refresh; no model-side fetch exists on this path.
+    ///
+    /// **Mini mode (engineer's choice, documented):** Cancel always lands on
+    /// the FULL timer — the pre-`endSession()` `isMiniTimerActive` value is
+    /// not retained or restored (`endSession()` cleared the flag and the
+    /// modal is a full-window affair; ending from mini already restored the
+    /// main window). The user re-collapses from the full timer if desired;
+    /// silently re-collapsing after a modal interaction would surprise.
+    ///
+    /// - Throws: only `restore(from:)`'s `.sessionAlreadyActive` — impossible
+    ///   here (the engine has been idle since the confirm-End), but surfaced,
+    ///   never swallowed; on a throw nothing changed (the modal stays up for
+    ///   retry, the phase is untouched).
+    /// - Returns: `nil` is never returned (non-optional); the typed
+    ///   `.noEndingSession` covers the no-modal states.
+    @discardableResult
+    public func cancelEndOfSession() throws -> EndOfSessionCancelOutcome {
+        guard case .endingSession(_, let snapshot, let context) = appPhase else {
+            return .noEndingSession
+        }
+        // Pinned step 1: restore BEFORE any state change — the engine is
+        // live again from this instant (re-anchored at now), so no window
+        // exists where the flow is resolvable-but-idle.
+        try coordinator.restore(from: snapshot)
+        // Pinned step 2: the observable session state follows the captured
+        // phase — faithful restoration (running-at-end → running;
+        // paused-at-end → paused).
+        sessionState = snapshot.isPaused ? .paused : .running
+        // Pinned step 3: the phase swap drops the retained ending state
+        // (result + snapshot) and returns to the timer.
+        appPhase = .timerView(context)
+        return .restored
     }
 
     // MARK: - Break flow (issue #23, PRD §14)

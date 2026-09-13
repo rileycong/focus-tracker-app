@@ -53,16 +53,22 @@ struct FocusTrackerApp: App {
                     TasksView(model: model)
                 case .timerView(let context):
                     TimerView(context: context, model: model)
-                case .endingSession(let result, let context):
+                case .endingSession(let result, _, let context):
                     // The end-of-session modal (issue #22, PRD §12): ONE
                     // presentation path, driven by the phase right here in
                     // the app shell — never duplicated per view. The sheet
                     // exists exactly while the phase is `.endingSession`
-                    // (submission flips the phase; the sheet leaves with
-                    // the branch), and interactive dismissal is disabled —
-                    // submission is REQUIRED (§12.5). Issue #27: the modal
-                    // now also offers Discard (typed confirm) after a
-                    // failed append, so it can never trap.
+                    // (submission or the #29 Cancel flips the phase; the
+                    // sheet leaves with the branch), and interactive
+                    // dismissal is disabled — the flow resolves only
+                    // through an explicit control (§12.5; #29 keeps the
+                    // dismissal disabled and makes the Cancel BUTTON the
+                    // affordance). Issue #27: the modal now also offers
+                    // Discard (typed confirm) after a failed append, so it
+                    // can never trap. The phase's middle payload member
+                    // (the #29 end-instant snapshot) is consumed by
+                    // `AppModel.cancelEndOfSession` — the shell never
+                    // touches it.
                     //
                     // Quit is NOT blocked while this modal is up (#27,
                     // verified): there is no `NSApplicationDelegate` and no
