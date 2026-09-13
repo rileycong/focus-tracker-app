@@ -73,9 +73,6 @@ struct TimerView: View {
     /// `dailyLogStore`) every layer uses.
     let model: AppModel
 
-    /// Ring stroke width — substantial but calm (PRD §21).
-    private static let ringLineWidth: CGFloat = 10
-
     @State private var showsEndConfirmation = false
 
     var body: some View {
@@ -137,7 +134,7 @@ struct TimerView: View {
     private var titleBlock: some View {
         VStack(spacing: DesignTokens.spacingXS) {
             Text(displayTitle)
-                .font(.title2)
+                .font(DesignTokens.titleFont)
                 .lineLimit(1)
                 .padding(.horizontal, DesignTokens.spacingL)
             // Project line — omitted entirely when nil (issue #20 criterion 1).
@@ -173,7 +170,7 @@ struct TimerView: View {
             ZStack {
                 // Track.
                 Circle()
-                    .stroke(DesignTokens.divider, lineWidth: Self.ringLineWidth)
+                    .stroke(DesignTokens.divider, lineWidth: DesignTokens.ringLineWidth)
                 // Remaining arc: from the clamped progress offset to 1 — the
                 // ring shrinks as time passes (issue #20 criterion 2). At
                 // expiry the geometry swaps to the FULL circle (0→1) so the
@@ -187,19 +184,19 @@ struct TimerView: View {
                             ? DesignTokens.statusColor(.done)
                             : DesignTokens.statusColor(.inProgress),
                         style: StrokeStyle(
-                            lineWidth: Self.ringLineWidth, lineCap: .round))
+                            lineWidth: DesignTokens.ringLineWidth, lineCap: .round))
                     .rotationEffect(.degrees(-90))
                     // Paused is visible subtly (engineer's choice, calm per
                     // §21): the arc dims; the countdown dims with it below.
-                    .opacity(state.isPaused ? 0.45 : 1)
-                    .animation(.linear(duration: 1), value: state.ringArc)
-                    .animation(.easeInOut(duration: 0.35), value: state.isPaused)
+                    .opacity(state.isPaused ? DesignTokens.pausedArcOpacity : 1)
+                    .animation(DesignTokens.ringTickAnimation, value: state.ringArc)
+                    .animation(DesignTokens.stateAnimation, value: state.isPaused)
                 Text(state.countdownText)
                     .font(.system(
                         size: diameter * 0.18, weight: .thin, design: .monospaced))
                     .monospacedDigit()
-                    .opacity(state.isPaused ? 0.55 : 1)
-                    .animation(.easeInOut(duration: 0.35), value: state.isPaused)
+                    .opacity(state.isPaused ? DesignTokens.pausedTextOpacity : 1)
+                    .animation(DesignTokens.stateAnimation, value: state.isPaused)
             }
             .frame(width: diameter, height: diameter)
             // Estimated finish time under the ring; omitted at expiry

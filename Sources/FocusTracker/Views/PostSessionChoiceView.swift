@@ -35,7 +35,7 @@ struct PostSessionChoiceView: View {
     var body: some View {
         VStack(spacing: DesignTokens.spacingL) {
             Text("Session logged")
-                .font(.title2)
+                .font(DesignTokens.titleFont)
             Text("What's next?")
                 .font(DesignTokens.statusGroupFont)
                 .foregroundStyle(.secondary)

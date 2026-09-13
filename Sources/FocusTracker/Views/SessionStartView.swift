@@ -228,9 +228,9 @@ struct SessionStartView: View {
                         width: DesignTokens.statusDotSize,
                         height: DesignTokens.statusDotSize)
                     .accessibilityLabel(Text(target.status.rawValue))
-                VStack(alignment: .leading, spacing: 1) {
+                VStack(alignment: .leading, spacing: DesignTokens.spacingXS) {
                     Text(target.title)
-                        .font(.body)
+                        .font(DesignTokens.bodyFont)
                         .lineLimit(1)
                     if target.depth > 0 {
                         Text(target.parentTaskTitle)
@@ -292,9 +292,10 @@ struct SessionStartView: View {
                         Button(name) { adHoc.commitCategory(name) }
                     }
                 } label: {
-                    Image(systemName: "chevron.down.chevron.down")
+                    Image(systemName: "chevron.down")
                 }
-                .menuIndicator(.visible)
+                .menuStyle(.borderlessButton)
+                .menuIndicator(.hidden)
                 .fixedSize()
                 .help("Suggested categories from the vault")
             }
@@ -342,7 +343,8 @@ struct SessionStartView: View {
                 .disabled(!canStart)
             }
         }
-        .padding(DesignTokens.spacingM)
+        .padding(.horizontal, DesignTokens.spacingL)
+        .padding(.vertical, DesignTokens.spacingM)
     }
 
     // MARK: - Actions
@@ -460,7 +462,7 @@ private struct FlowChips: View {
                         onRemove(name)
                     } label: {
                         Image(systemName: "xmark.circle.fill")
-                            .font(.system(size: 9))
+                            .font(.system(size: DesignTokens.chipRemoveIconSize))
                     }
                     .buttonStyle(.plain)
                     .foregroundStyle(.secondary)

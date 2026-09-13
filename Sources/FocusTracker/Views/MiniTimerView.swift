@@ -94,10 +94,12 @@ struct MiniTimerView: View {
             TimelineView(.periodic(from: .now, by: 1)) { _ in
                 let state = displayState()
                 Text(state.countdownText)
-                    .font(.system(size: 30, weight: .thin, design: .monospaced))
+                    .font(.system(
+                        size: DesignTokens.miniCountdownSize, weight: .thin,
+                        design: .monospaced))
                     .monospacedDigit()
-                    .opacity(state.isPaused ? 0.55 : 1)
-                    .animation(.easeInOut(duration: 0.35), value: state.isPaused)
+                    .opacity(state.isPaused ? DesignTokens.pausedTextOpacity : 1)
+                    .animation(DesignTokens.stateAnimation, value: state.isPaused)
             }
             // The lifted #20 snapshot; omitted entirely when it was
             // unavailable (graceful omission, same semantics as #20).
@@ -143,10 +145,11 @@ struct MiniTimerView: View {
     /// matching `DesignTokens.background` (the panel itself is transparent,
     /// so these corners are the real window corners).
     private var miniBackground: some View {
-        RoundedRectangle(cornerRadius: 12, style: .continuous)
+        RoundedRectangle(cornerRadius: DesignTokens.panelCornerRadius, style: .continuous)
             .fill(DesignTokens.background)
             .overlay(
-                RoundedRectangle(cornerRadius: 12, style: .continuous)
+                RoundedRectangle(
+                    cornerRadius: DesignTokens.panelCornerRadius, style: .continuous)
                     .strokeBorder(DesignTokens.divider, lineWidth: 1))
             .shadow(color: .black.opacity(0.35), radius: 10, y: 3)
     }

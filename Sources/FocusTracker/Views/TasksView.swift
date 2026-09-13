@@ -364,14 +364,14 @@ struct TasksView: View {
     private var notConfiguredView: some View {
         VStack(spacing: DesignTokens.spacingM) {
             Image(systemName: "tray")
-                .font(.system(size: 40))
+                .font(.system(size: DesignTokens.emptyStateIconSize))
                 .foregroundStyle(.secondary)
             Text("Focus Tracker")
-                .font(.title2)
+                .font(DesignTokens.titleFont)
             Text(
                 "Point the app at a vault folder that contains a Tasks/ "
                     + "folder — the tasks there show up in this list.")
-                .font(.body)
+                .font(DesignTokens.bodyFont)
                 .foregroundStyle(.secondary)
                 .multilineTextAlignment(.center)
             Button("Choose vault…", action: chooseVault)
@@ -391,13 +391,13 @@ struct TasksView: View {
                     .foregroundStyle(DesignTokens.warning)
                 VStack(alignment: .leading, spacing: DesignTokens.spacingXS) {
                     Text(title)
-                        .font(.headline)
+                        .font(DesignTokens.sheetHeaderFont)
                     Text(path.path(percentEncoded: false))
-                        .font(.caption)
+                        .font(DesignTokens.annotationFont)
                         .foregroundStyle(.secondary)
                         .textSelection(.enabled)
                     Text(detail)
-                        .font(.caption)
+                        .font(DesignTokens.annotationFont)
                         .foregroundStyle(.secondary)
                 }
                 Spacer()

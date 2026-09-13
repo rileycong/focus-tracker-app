@@ -89,6 +89,7 @@
 		C59368564A9EB08BBEDF7F94 /* TaskRowView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 608FD7031D7A36234F5A9C7B /* TaskRowView.swift */; };
 		C71E057857B6BCB5BF0CA4DA /* AtomicFileWriterError.swift in Sources */ = {isa = PBXBuildFile; fileRef = E0BA7BF8D84B73D94EF3157C /* AtomicFileWriterError.swift */; };
 		C74A7A1B43D4667CC710EDB7 /* ActiveSessionSnapshot.swift in Sources */ = {isa = PBXBuildFile; fileRef = D3324705D893E9D8CD363C49 /* ActiveSessionSnapshot.swift */; };
+		C83B1E86C1AB025E73ADCDFC /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 384BC9D81BCCB4876A5D5889 /* Assets.xcassets */; };
 		CD6092F00DDF72B36F057846 /* VaultStoreError.swift in Sources */ = {isa = PBXBuildFile; fileRef = F2263127664569F0F7194904 /* VaultStoreError.swift */; };
 		D28F8691AE913F628117CD75 /* StatusTransitionTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 20D561F957E51C275426C970 /* StatusTransitionTests.swift */; };
 		D34EBE82EA8F20AF4E6F1D02 /* DailyLogDay.swift in Sources */ = {isa = PBXBuildFile; fileRef = 449D8FADD940BEE8778B592B /* DailyLogDay.swift */; };
@@ -140,6 +141,7 @@
 		2FD6B094AE292E2B2CFE2055 /* SmokeTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SmokeTests.swift; sourceTree = "<group>"; };
 		33016951FE75D4AE77E4F634 /* MiniTimerView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MiniTimerView.swift; sourceTree = "<group>"; };
 		36866CB5BBBDD9DC3EA4B5C5 /* VaultStoreWriteTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VaultStoreWriteTests.swift; sourceTree = "<group>"; };
+		384BC9D81BCCB4876A5D5889 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		398F24EA25BB554B7018B9F3 /* ActiveSessionCoordinatorTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ActiveSessionCoordinatorTests.swift; sourceTree = "<group>"; };
 		3D5D3D438C7122B3D09FBB7E /* TasksViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TasksViewModel.swift; sourceTree = "<group>"; };
 		4404083D41F195CEF70D0FD1 /* TimerView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TimerView.swift; sourceTree = "<group>"; };
@@ -297,6 +299,7 @@
 		576971CDFEB77959806DCDA8 /* FocusTracker */ = {
 			isa = PBXGroup;
 			children = (
+				384BC9D81BCCB4876A5D5889 /* Assets.xcassets */,
 				248E5131297EB06C2E76BC68 /* FocusTrackerApp.swift */,
 				BCE466B78BD1A66F6A5A44BD /* Info.plist */,
 				AEB2CCDD8C612BCA7183F535 /* App */,
@@ -423,6 +426,7 @@
 			buildConfigurationList = A7D4699F7251ABC6697FBEE3 /* Build configuration list for PBXNativeTarget "FocusTracker" */;
 			buildPhases = (
 				1E0E17E2D6CD2B1127A43B64 /* Sources */,
+				C29ADF70E759E5050320A448 /* Resources */,
 				24C536F0EB3C8481E4BA3F4C /* Frameworks */,
 			);
 			buildRules = (
@@ -496,6 +500,17 @@
 			);
 		};
 /* End PBXProject section */
+
+/* Begin PBXResourcesBuildPhase section */
+		C29ADF70E759E5050320A448 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				C83B1E86C1AB025E73ADCDFC /* Assets.xcassets in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXResourcesBuildPhase section */
 
 /* Begin PBXSourcesBuildPhase section */
 		14199D1DC0B5F5856C5705F7 /* Sources */ = {

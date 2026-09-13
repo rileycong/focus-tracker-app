@@ -43,17 +43,13 @@ struct BreakView: View {
     /// `endBreak()` path.
     let model: AppModel
 
-    /// Ring stroke width — same substantial-but-calm weight as the session
-    /// timer (PRD §21).
-    private static let ringLineWidth: CGFloat = 10
-
     var body: some View {
         GeometryReader { geometry in
             // Same pinned sizing shape as TimerView: diameter ≈ min(w, h) * 0.6.
             let diameter = min(geometry.size.width, geometry.size.height) * 0.6
             VStack(spacing: DesignTokens.spacingL) {
                 Text("Break")
-                    .font(.title2)
+                    .font(DesignTokens.titleFont)
                     .foregroundStyle(.secondary)
                 TimelineView(.periodic(from: .now, by: 1)) { _ in
                     // Ring + banner + control all re-derive on every ~1 s
@@ -64,7 +60,7 @@ struct BreakView: View {
                         ringBlock(diameter: diameter)
                         if model.isBreakExpired {
                             expiryBanner
-                                .transition(.opacity)
+                                .transition(.opacity.animation(DesignTokens.stateAnimation))
                         }
                         endControl
                     }
@@ -86,7 +82,7 @@ struct BreakView: View {
         ZStack {
             // Track.
             Circle()
-                .stroke(DesignTokens.divider, lineWidth: Self.ringLineWidth)
+                .stroke(DesignTokens.divider, lineWidth: DesignTokens.ringLineWidth)
             // Remaining arc: from the clamped progress offset to 1 — the
             // ring shrinks as time passes. At expiry the geometry swaps to
             // the FULL circle (0→1) via the pure, regression-tested
@@ -99,9 +95,9 @@ struct BreakView: View {
                         ? DesignTokens.statusColor(.done)
                         : DesignTokens.statusColor(.inProgress),
                     style: StrokeStyle(
-                        lineWidth: Self.ringLineWidth, lineCap: .round))
+                        lineWidth: DesignTokens.ringLineWidth, lineCap: .round))
                 .rotationEffect(.degrees(-90))
-                .animation(.linear(duration: 1), value: arc)
+                .animation(DesignTokens.ringTickAnimation, value: arc)
             Text(TimerDisplay.countdownText(remainingSeconds: remaining))
                 .font(.system(
                     size: diameter * 0.18, weight: .thin, design: .monospaced))

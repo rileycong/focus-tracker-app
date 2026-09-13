@@ -109,7 +109,7 @@ struct SubtaskFormView: View {
 
     private var header: some View {
         Text(modeTitle)
-            .font(.headline)
+            .font(DesignTokens.sheetHeaderFont)
             .frame(maxWidth: .infinity, alignment: .leading)
             .padding(.horizontal, DesignTokens.spacingL)
             .padding(.vertical, DesignTokens.spacingM)
@@ -227,8 +227,8 @@ struct SubtaskFormView: View {
             Text("Notes")
                 .font(DesignTokens.statusGroupFont)
             TextEditor(text: notesBinding)
-                .font(.body)
-                .frame(minHeight: 70)
+                .font(DesignTokens.bodyFont)
+                .frame(minHeight: DesignTokens.notesEditorMinHeight)
                 .scrollContentBackground(.hidden)
                 .padding(DesignTokens.spacingXS)
                 .background(DesignTokens.chipBackground)
@@ -281,6 +281,6 @@ struct SubtaskFormView: View {
             Image(systemName: "exclamationmark.circle.fill")
                 .foregroundStyle(DesignTokens.overdue)
         }
-        .font(.caption)
+        .font(DesignTokens.annotationFont)
     }
 }

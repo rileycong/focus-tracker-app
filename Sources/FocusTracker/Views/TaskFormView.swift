@@ -153,7 +153,7 @@ struct TaskFormView: View {
 
     private var header: some View {
         Text(modeTitle)
-            .font(.headline)
+            .font(DesignTokens.sheetHeaderFont)
             .frame(maxWidth: .infinity, alignment: .leading)
             .padding(.horizontal, DesignTokens.spacingL)
             .padding(.vertical, DesignTokens.spacingM)
@@ -246,8 +246,8 @@ struct TaskFormView: View {
             Button {
                 state.removeCategory(name)
             } label: {
-                Image(systemName: "xmark")
-                    .font(.system(size: 7, weight: .bold))
+                Image(systemName: "xmark.circle.fill")
+                    .font(.system(size: DesignTokens.chipRemoveIconSize))
             }
             .buttonStyle(.plain)
             .foregroundStyle(.secondary)
@@ -384,8 +384,8 @@ struct TaskFormView: View {
             Text("Notes")
                 .font(DesignTokens.statusGroupFont)
             TextEditor(text: notesBinding)
-                .font(.body)
-                .frame(minHeight: 80)
+                .font(DesignTokens.bodyFont)
+                .frame(minHeight: DesignTokens.notesEditorMinHeight)
                 .scrollContentBackground(.hidden)
                 .padding(DesignTokens.spacingXS)
                 .background(DesignTokens.chipBackground)
@@ -453,6 +453,6 @@ struct TaskFormView: View {
             Image(systemName: "exclamationmark.circle.fill")
                 .foregroundStyle(DesignTokens.overdue)
         }
-        .font(.caption)
+        .font(DesignTokens.annotationFont)
     }
 }

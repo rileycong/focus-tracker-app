@@ -23,6 +23,35 @@ enum DesignTokens {
     static let rowVerticalPadding: CGFloat = 7
     /// Corner radius for chips and the selection highlight.
     static let cornerRadius: CGFloat = 6
+    /// Corner radius of the mini panel's floating card — a window shape, one
+    /// calm step above the chip radius.
+    static let panelCornerRadius: CGFloat = 12
+    /// Countdown ring stroke width — shared by the full timer and the break
+    /// screen so the two countdowns read as one visual language.
+    static let ringLineWidth: CGFloat = 10
+    /// Point size of the mini panel's countdown digits (fixed — the panel has
+    /// a fixed content size, unlike the full timer's diameter-derived size).
+    static let miniCountdownSize: CGFloat = 30
+    /// Onboarding hero icon point size.
+    static let emptyStateIconSize: CGFloat = 40
+    /// Minimum height of the notes editor in both forms (one editor shape).
+    static let notesEditorMinHeight: CGFloat = 80
+    /// Disclosure chevron glyph size in task/subtask rows.
+    static let chevronIconSize: CGFloat = 9
+    /// Chip remove glyph size in the forms' category tokens.
+    static let chipRemoveIconSize: CGFloat = 9
+
+    // MARK: - Motion (subtle per PRD §21 — timing, no effects)
+
+    /// The ring's per-second tick — linear so the arc advances evenly.
+    static let ringTickAnimation: Animation = .linear(duration: 1)
+    /// Subtle state changes (pause dim in/out, expiry banner fade).
+    static let stateAnimation: Animation = .easeInOut(duration: 0.35)
+    /// Arc opacity while paused — dimmed but visible.
+    static let pausedArcOpacity: CGFloat = 0.45
+    /// Countdown text opacity while paused — slightly brighter than the arc
+    /// so the frozen number stays readable.
+    static let pausedTextOpacity: CGFloat = 0.55
 
     // MARK: - Typography
 
@@ -34,6 +63,15 @@ enum DesignTokens {
     static let chipFont: Font = .system(size: 10, weight: .medium)
     /// Deadline and count annotations.
     static let annotationFont: Font = .caption
+    /// Row and field body text (task titles, form text fields, editors).
+    static let bodyFont: Font = .body
+    /// Large screen/sheet titles (the timer's task title, the break screen,
+    /// the post-session choice, the end-of-session modal, onboarding) — the
+    /// single large step in the type scale.
+    static let titleFont: Font = .title2
+    /// Sheet headers (task/subtask forms) and the degraded-state banner
+    /// title — the mid-weight heading between `titleFont` and the row fonts.
+    static let sheetHeaderFont: Font = .headline
 
     // MARK: - Colors (dark-first; the app enforces `.dark` at the root)
 

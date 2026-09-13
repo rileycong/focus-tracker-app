@@ -51,7 +51,7 @@ struct TaskRowView: View {
                     viewModel.toggleExpanded(forKey: TasksGrouping.taskCollapseKey(task.id))
                 } label: {
                     Image(systemName: "chevron.right")
-                        .font(.system(size: 9, weight: .semibold))
+                        .font(.system(size: DesignTokens.chevronIconSize, weight: .semibold))
                         .foregroundStyle(.secondary)
                         .rotationEffect(
                             .degrees(
@@ -68,7 +68,7 @@ struct TaskRowView: View {
                 .frame(width: DesignTokens.statusDotSize, height: DesignTokens.statusDotSize)
                 .accessibilityLabel(Text(task.status.rawValue))
             Text(task.title)
-                .font(.body)
+                .font(DesignTokens.bodyFont)
                 .lineLimit(1)
             if hasSubtasks {
                 Label(

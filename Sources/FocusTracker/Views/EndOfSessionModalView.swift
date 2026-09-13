@@ -64,7 +64,7 @@ struct EndOfSessionModalView: View {
     private var header: some View {
         VStack(alignment: .leading, spacing: DesignTokens.spacingXS) {
             Text("Session complete")
-                .font(.title2)
+                .font(DesignTokens.titleFont)
             Text(displayTitle)
                 .font(DesignTokens.statusGroupFont)
                 .foregroundStyle(.secondary)

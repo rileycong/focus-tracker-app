@@ -99,7 +99,7 @@ struct SubtaskRowView: View {
                     viewModel.toggleExpanded(forKey: collapseKey)
                 } label: {
                     Image(systemName: "chevron.right")
-                        .font(.system(size: 9, weight: .semibold))
+                        .font(.system(size: DesignTokens.chevronIconSize, weight: .semibold))
                         .foregroundStyle(.secondary)
                         .rotationEffect(.degrees(isExpanded ? 90 : 0))
                 }
@@ -115,7 +115,7 @@ struct SubtaskRowView: View {
                 .frame(width: DesignTokens.statusDotSize, height: DesignTokens.statusDotSize)
                 .accessibilityLabel(Text(subtask.status.rawValue))
             Text(subtask.title)
-                .font(.body)
+                .font(DesignTokens.bodyFont)
                 .lineLimit(1)
             if hasChildren {
                 Label(
