@@ -539,21 +539,240 @@ public final class AppModel {
     ///   exposed state refreshed (`.changed`). A missing vault at the new
     ///   location surfaces the degraded state with the path retained — the
     ///   model never writes back to (never clears) settings on degradation.
+    ///
+    /// The pinned refusal chain and the storing tail are shared verbatim
+    /// with the #26 creation/onboarding-selection flows
+    /// (`isVaultLocationChangeRefused` / `applyVaultLocation(_:)`), so the
+    /// one-storing-code-path rule (#14, reused by #26) cannot drift. The
+    /// method's own behavior is unchanged.
     @discardableResult
     public func setVaultPath(to newURL: URL) async -> VaultPathChangeOutcome {
-        guard !coordinator.isActive else { return .refusedWhileSessionActive }
-        if case .endingSession = appPhase { return .refusedWhileSessionActive }
+        guard !isVaultLocationChangeRefused else { return .refusedWhileSessionActive }
+        await applyVaultLocation(newURL)
+        return .changed
+    }
+
+    /// The pinned vault-location-change refusal chain (issue #14, extended
+    /// by #22/#23), shared by `setVaultPath(to:)` and the #26
+    /// creation/onboarding-selection flows: true when a session is active,
+    /// the end-of-session flow is unresolved, or a break is running. The
+    /// `.postSessionChoice` phase deliberately does NOT refuse — nothing is
+    /// pending a write until the break actually starts (the existing
+    /// #14/#23 policy; #26 pins the same chain for `createVault` and the
+    /// choose-existing selection). Defensive only for #26: onboarding is
+    /// reachable solely when unconfigured.
+    private var isVaultLocationChangeRefused: Bool {
+        if coordinator.isActive { return true }
+        // Issue #22: the pending result must log into the vault the session
+        // ran against (§18) — see `setVaultPath`'s policy documentation.
+        if case .endingSession = appPhase { return true }
         // Issue #23 (criterion 21): a pending break appends through the
         // CURRENT stores — the path may not move under the write-in-flight
         // flow (§18). The choice phase deliberately does not refuse
         // (nothing is pending a write until the break starts).
-        if case .breakActive = appPhase { return .refusedWhileSessionActive }
+        if case .breakActive = appPhase { return true }
+        return false
+    }
+
+    /// The ONE storing code path for a vault location (issue #14 semantics,
+    /// reused verbatim by the #26 `createVault`/`selectExistingVault`
+    /// flows): persists the path to `AppSettings.vaultPath` exactly as
+    /// before (`newURL.path(percentEncoded: false)` — one settings key, no
+    /// parallel path), recreates both stores against the URL and reloads,
+    /// refreshing all exposed state.
+    private func applyVaultLocation(_ newURL: URL) async {
         settings.vaultPath = newURL.path(percentEncoded: false)
         vaultURL = newURL
         vaultStore = VaultStore(vaultURL: newURL)
         dailyLogStore = DailyLogStore(vaultURL: newURL)
         await reloadVault()
-        return .changed
+    }
+
+    // MARK: - First-run vault creation + onboarding selection (issue #26)
+
+    /// The typed outcome of `createVault(parentURL:name:)` — issue #26's
+    /// pinned create-path matrix (`Equatable` for exact-case assertions,
+    /// house style). Every non-collision, non-refused outcome ends with the
+    /// path stored through the one `setVaultPath` storing path
+    /// (`applyVaultLocation(_:)`): settings written, both stores recreated,
+    /// vault reloaded — the app lands on the Tasks view (`.loaded`).
+    public enum VaultCreationOutcome: Equatable, Sendable {
+        /// `<parent>/<name>` was absent: the vault root + `Tasks/` +
+        /// `Logs/` were created.
+        case created(URL)
+        /// `<parent>/<name>` existed as a directory with missing structure:
+        /// **ONLY the missing directories** were scaffolded (an explicit
+        /// create operation — no consent step on this path, pinned);
+        /// existing content untouched. Distinct from `.created` (engineer's
+        /// choice, documented): tests and callers can tell a fresh vault
+        /// from a repaired one without diffing the disk.
+        case scaffolded(URL)
+        /// `<parent>/<name>` was an already-valid vault: used as-is —
+        /// ZERO writes to the vault; existing files byte-identical.
+        case usedExisting(URL)
+        /// A non-directory occupies the target itself, or a needed folder
+        /// path (`<name>`, `Tasks`, `Logs`) is occupied by a file. Collision
+        /// detection precedes ANY mkdir (pinned): nothing was modified —
+        /// e.g. `Tasks` occupied while `Logs/` is missing creates no
+        /// `Logs/`. Carries the target URL for the inline error.
+        case nameCollision(URL)
+        /// Refused under the same conditions `setVaultPath` refuses (see
+        /// `isVaultLocationChangeRefused`); nothing was touched.
+        case refusedWhileSessionActive
+    }
+
+    /// The typed outcome of the onboarding choose-existing flow (issue #26;
+    /// `Equatable`, house style). The pre-check itself is onboarding-level:
+    /// `OnboardingView` runs the pinned `VaultStructureValidator` on the
+    /// picked folder BEFORE calling this method, to decide whether consent
+    /// UI is needed — this method then applies the user's decision and is
+    /// the only path that mutates anything. `setVaultPath` itself is
+    /// unchanged (its degraded-state re-selection flow keeps current
+    /// behavior — out of scope).
+    public enum ExistingVaultOutcome: Equatable, Sendable {
+        /// The folder was structurally valid: applied via `setVaultPath`
+        /// exactly as today (`.changed` semantics) — zero writes to the
+        /// vault. No consent required (pinned: the frictionless case).
+        case selected(URL)
+        /// Structure was missing and the user consented: ONLY the missing
+        /// directories were scaffolded (the same helper as the create
+        /// path), then the path stored like a normal selection.
+        case scaffolded(URL)
+        /// Consent was declined: typed cancelled outcome — NOTHING on disk
+        /// modified, path NOT stored; the app stays `.notConfigured`.
+        case cancelled(URL)
+        /// A file occupies `Tasks` or `Logs` under the picked folder: typed
+        /// inline error; nothing modified; no scaffold offer.
+        case nameCollision(URL)
+        /// Defensive refusal parity with `setVaultPath`; nothing touched.
+        case refusedWhileSessionActive
+    }
+
+    /// Creates (or completes) the vault at `<parent>/<name>` — the issue #26
+    /// create-path matrix, the default first-run flow:
+    ///
+    /// 1. **Name sanitization** (`VaultFolderNameSanitizer`, the house slug
+    ///    character policy without `.md`/`untitled`) runs first — pure, and
+    ///    an empty result is the typed `SanitizationError.emptyAfterSanitize`
+    ///    before anything is examined (the UI disables Create on the same
+    ///    rule; this is fail-closed defense).
+    /// 2. **Refusal chain** — exactly `setVaultPath`'s
+    ///    (`isVaultLocationChangeRefused`); nothing is touched on refusal.
+    /// 3. **Collision detection BEFORE any mkdir** (pinned): a file at
+    ///    `<parent>/<name>` itself, or the validator's `.nameCollision`
+    ///    (pinned precedence: collision over missing), returns
+    ///    `.nameCollision` with nothing modified — `Tasks` occupied while
+    ///    `Logs/` is missing does NOT create `Logs/`.
+    /// 4. **Absent target** → root + `Tasks/` + `Logs/` created
+    ///    (`.created`); **directory with missing structure** → ONLY the
+    ///    missing dirs scaffolded, existing content untouched
+    ///    (`.scaffolded`); **valid directory** → zero writes
+    ///    (`.usedExisting`).
+    /// 5. **On success** the path is stored exactly as `setVaultPath` does
+    ///    (`applyVaultLocation(_:)` — one storing code path) and the app
+    ///    lands on Tasks (`.loaded`; an empty inventory's "No tasks yet" is
+    ///    the fine expected state).
+    ///
+    /// A mid-creation I/O failure (not a user decision) throws — house
+    /// style — leaving what was already created on disk, the path unstored;
+    /// a retry re-validates and finishes (idempotent by the matrix).
+    @discardableResult
+    public func createVault(
+        parentURL: URL, name: String
+    ) async throws -> VaultCreationOutcome {
+        let folderName = try VaultFolderNameSanitizer.sanitize(name)
+        if isVaultLocationChangeRefused { return .refusedWhileSessionActive }
+
+        // The target URL carries NO directory-annotated trailing slash, so
+        // the stored settings path matches the plain-path convention of the
+        // picker-based `setVaultPath` flow, and the existence probe below
+        // cannot be fooled by `stat("…/<name>/")`'s ENOTDIR on a file.
+        let vaultURL = parentURL.appendingPathComponent(folderName)
+        let targetPath = vaultURL.path(percentEncoded: false)
+        var isDirectory: ObjCBool = false
+        if FileManager.default.fileExists(atPath: targetPath, isDirectory: &isDirectory) {
+            // The target exists: a non-directory is the typed collision
+            // (nothing modified); otherwise the validator classifies it.
+            guard isDirectory.boolValue else { return .nameCollision(vaultURL) }
+            let validation = VaultStructureValidator.validate(at: vaultURL)
+            switch validation {
+            case .nameCollision:
+                return .nameCollision(vaultURL)
+            case .valid:
+                // Use as-is — zero writes to the vault (pinned).
+                await applyVaultLocation(vaultURL)
+                return .usedExisting(vaultURL)
+            case .missingTasks, .missingLogs, .bothMissing:
+                // Scaffold ONLY the missing dirs (explicit create — no
+                // consent step on the create path, pinned).
+                try VaultScaffolder.scaffoldMissingDirectories(
+                    at: vaultURL, validation: validation)
+                await applyVaultLocation(vaultURL)
+                return .scaffolded(vaultURL)
+            }
+        }
+        // Absent: create the root, then the canonical structure.
+        try VaultScaffolder.createRoot(at: vaultURL)
+        try VaultScaffolder.scaffoldMissingDirectories(
+            at: vaultURL, validation: .bothMissing)
+        await applyVaultLocation(vaultURL)
+        return .created(vaultURL)
+    }
+
+    /// Applies the user's decision for a folder picked on the onboarding
+    /// "Choose Existing Vault…" flow (issue #26). The onboarding-level
+    /// pre-check (`VaultStructureValidator.validate(at:)`, run by the view
+    /// BEFORE any `setVaultPath`) decides which consent UI the user saw;
+    /// this method re-validates and applies the decision — the ONE path
+    /// that mutates anything:
+    ///
+    /// - `.valid` → applied via `setVaultPath(to:)` exactly as today
+    ///   (`.changed` semantics, zero vault writes) → `.selected`; no
+    ///   consent needed (pinned: any folder name with the structure simply
+    ///   falls out of `.valid`).
+    /// - Structure missing + `consent == true` → ONLY the missing dirs
+    ///   scaffolded (the same helper as the create path), then stored like
+    ///   a normal selection → `.scaffolded`.
+    /// - Structure missing + `consent == false` → `.cancelled`: nothing on
+    ///   disk modified, path NOT stored, the app stays `.notConfigured`.
+    /// - `.nameCollision` → `.nameCollision` (typed inline error; nothing
+    ///   modified; no scaffold offer).
+    ///
+    /// The refusal chain runs first (defensive parity with
+    /// `setVaultPath`); nothing is touched on refusal. A mid-scaffold I/O
+    /// failure (not a user decision) throws — the path stays unstored.
+    /// Note the picked URL is used EXACTLY as picked — no re-sanitization
+    /// (the folder already exists on disk; re-deriving its name through the
+    /// create-path sanitizer could redirect the operation to a new folder).
+    @discardableResult
+    public func selectExistingVault(
+        at url: URL, scaffoldMissingWithConsent consent: Bool
+    ) async throws -> ExistingVaultOutcome {
+        if isVaultLocationChangeRefused { return .refusedWhileSessionActive }
+
+        let validation = VaultStructureValidator.validate(at: url)
+        switch validation {
+        case .valid:
+            // Used as-is via setVaultPath exactly as today (issue #26 pins
+            // `.changed` semantics here); the pre-check above already
+            // refused nothing, and the chain was checked — the mapping is
+            // defensive only.
+            switch await setVaultPath(to: url) {
+            case .changed:
+                return .selected(url)
+            case .refusedWhileSessionActive:
+                return .refusedWhileSessionActive
+            }
+        case .nameCollision:
+            return .nameCollision(url)
+        case .missingTasks, .missingLogs, .bothMissing:
+            guard consent else { return .cancelled(url) }
+            // Scaffold ONLY what this re-validation found missing — the
+            // one implementation shared with the create path (pinned).
+            try VaultScaffolder.scaffoldMissingDirectories(at: url, validation: validation)
+            await applyVaultLocation(url)
+            return .scaffolded(url)
+        }
     }
 
     // MARK: - Recovery surfacing (#13 → #20/#22 hand-off)

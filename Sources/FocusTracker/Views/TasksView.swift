@@ -49,7 +49,10 @@ struct TasksView: View {
         Group {
             switch model.vaultState {
             case .notConfigured:
-                notConfiguredView
+                // Issue #26: the real onboarding screen replaces the #15
+                // placeholder (Create New Vault default + Choose Existing
+                // Vault with the pinned pre-check/consent flow).
+                OnboardingView(model: model)
             case .vaultMissing(let path):
                 degradedView(
                     title: "Vault folder not found",
@@ -358,28 +361,6 @@ struct TasksView: View {
     }
 
     // MARK: - App states
-
-    /// First launch (`notConfigured`): minimal onboarding placeholder with
-    /// the "Choose vault…" folder picker (the real Settings flow is #16+).
-    private var notConfiguredView: some View {
-        VStack(spacing: DesignTokens.spacingM) {
-            Image(systemName: "tray")
-                .font(.system(size: DesignTokens.emptyStateIconSize))
-                .foregroundStyle(.secondary)
-            Text("Focus Tracker")
-                .font(DesignTokens.titleFont)
-            Text(
-                "Point the app at a vault folder that contains a Tasks/ "
-                    + "folder — the tasks there show up in this list.")
-                .font(DesignTokens.bodyFont)
-                .foregroundStyle(.secondary)
-                .multilineTextAlignment(.center)
-            Button("Choose vault…", action: chooseVault)
-                .buttonStyle(.bordered)
-        }
-        .padding(DesignTokens.spacingL)
-        .frame(maxWidth: 380)
-    }
 
     /// Degraded vault states (`vaultMissing` / `tasksDirectoryMissing`),
     /// per the #14 contract: the stored path is shown and retained — never

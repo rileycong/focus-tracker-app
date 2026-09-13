@@ -304,8 +304,12 @@ final class AppModelSessionStartTests: XCTestCase {
 
     func testVaultNotConfiguredIsRefusedWithTypeCase() async throws {
         // A model with no vault path at all (never configured).
+        // An isolated, empty suite — the test intent is an unconfigured
+        // model, and the runner's standard defaults may hold a real
+        // vaultPath on a machine where the app has been run.
         let unconfigured = AppModel(
-            settings: AppSettings(defaults: UserDefaults()),
+            settings: try AppSettings(
+                suiteName: "SessionStartTests-unconfigured-\(UUID().uuidString)"),
             persistenceDirectory: persistenceDirectory,
             scheduler: ManualTickScheduler(), sessionClock: clock)
         await unconfigured.bootstrap()
@@ -425,8 +429,12 @@ final class AppModelSessionStartTests: XCTestCase {
         try model2.endSession()
 
         // …then the unconfigured and pending-recovery refusals.
+        // An isolated, empty suite — the test intent is an unconfigured
+        // model, and the runner's standard defaults may hold a real
+        // vaultPath on a machine where the app has been run.
         let unconfigured = AppModel(
-            settings: AppSettings(defaults: UserDefaults()),
+            settings: try AppSettings(
+                suiteName: "SessionStartTests-unconfigured-\(UUID().uuidString)"),
             persistenceDirectory: persistenceDirectory,
             scheduler: ManualTickScheduler(), sessionClock: clock)
         await unconfigured.bootstrap()
