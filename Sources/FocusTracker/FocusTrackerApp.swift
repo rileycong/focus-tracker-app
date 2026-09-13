@@ -23,7 +23,18 @@ struct FocusTrackerApp: App {
     }
 
     var body: some Scene {
-        WindowGroup {
+        // SINGLE WINDOW (issue #27 amendment): the #19 phase-driven shell
+        // used to live in a `WindowGroup`, so File → New Window / Cmd+N
+        // opened a duplicate whose own phase-driven content re-presented the
+        // REQUIRED `.endingSession` modal — a second, equally inescapable
+        // copy of it. The macOS 14 `Window` scene makes the app
+        // single-window: exactly one window can ever exist, so the modal can
+        // never re-present anywhere else. This is the deliberate utility-app
+        // shape (PRD §23: "keep the app small enough to behave like a
+        // utility rather than a workspace") — one task list, one focus
+        // session, one window; no multi-window feature is given up because
+        // none is offered.
+        Window("Focus Tracker", id: "main") {
             // The app-phase swap (issue #19, PRD §20.3; end flow issue #22;
             // break flow issue #23): the start flow moves the app to the
             // full-screen timer view (issue #20); confirming End moves it to
@@ -33,8 +44,9 @@ struct FocusTrackerApp: App {
             // Take Break, NOTHING auto-starting), a running break shows the
             // `.breakActive` countdown screen, and the choice's controls (or
             // the break's end) return to Tasks.
-            // The `.task` bootstrap runs once per window — the phase swap
-            // replaces the content, not the window identity.
+            // The `.task` bootstrap runs once — the scene's single window
+            // (issue #27 amendment) is the only bootstrap site; the phase
+            // swap replaces the content, not the window identity.
             Group {
                 switch model.appPhase {
                 case .tasksView:
@@ -63,6 +75,11 @@ struct FocusTrackerApp: App {
                     // the unsubmitted session (the documented §18
                     // honest-loss window on `.endingSession`) — the
                     // criterion is only that quitting is not BLOCKED.
+                    // Amendment (#27): with the single-window scene above,
+                    // the "stuck" experience is impossible three ways —
+                    // Discard escapes a failed append, there is no second
+                    // window to re-present the modal in, and nothing hooks
+                    // termination.
                     TimerView(context: context, model: model)
                         .sheet(isPresented: .constant(true)) {
                             EndOfSessionModalView(

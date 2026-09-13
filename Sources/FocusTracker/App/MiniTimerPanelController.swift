@@ -141,9 +141,9 @@ final class MiniTimerPanelController {
     }
 
     /// The app's main content window — the first window that is not an
-    /// `NSPanel`. SwiftUI's `WindowGroup` window stays in `NSApp.windows`
-    /// even while `orderOut`'d, so this finds it in every state the sync
-    /// drives.
+    /// `NSPanel`. The single-window `Window` scene (#27 amendment) keeps
+    /// its one window in `NSApp.windows` even while `orderOut`'d, so this
+    /// finds it in every state the sync drives.
     private static func mainWindow() -> NSWindow? {
         NSApp.windows.first { !($0 is NSPanel) }
     }
