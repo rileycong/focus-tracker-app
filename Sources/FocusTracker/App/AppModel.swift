@@ -122,6 +122,70 @@ import Observation
 /// is never inexplicable. A subtask completion that does NOT complete its
 /// top-level owner changes nothing discoverable and sets no notice.
 ///
+/// # Expiry alarm + focus-back auto-end (issue #33, PRD §9.5, §14.4)
+/// Issue #33 AMENDS the #12 pinned expiry decision ("expiry is pure state;
+/// focused keeps accumulating past expiry"): from this issue, expiry means
+/// the session ENDS — with `ended_at` pinned to the expiry instant — via a
+/// composition-layer amendment exactly like #27's; the engine is
+/// UNCHANGED (it still reports pure expiry state and keeps its honest
+/// second-precision accumulators; the amendment lives entirely here).
+/// The orchestration:
+///
+/// - **Detection (~1 s granularity, view-tick-driven):** the timer views'
+///   watch tasks call `evaluateSessionExpiry()` about once per second while
+///   a session is active (the same ~1 s cadence the break view's tick uses
+///   for `isBreakExpired`). The call is idempotent and cheap; detection is
+///   therefore within ~1 s of `remainingSeconds` hitting 0, the same
+///   granularity as the countdown display itself.
+/// - **Expiry while UNFOCUSED → alarm:** the `ExpiryAlarmController` (the
+///   alarm's one AppKit seam — the system beep ~1×/s + the
+///   `didBecomeActive` focus-back watch) starts beeping, and
+///   `isExpiryAlarmActive` flips true — `TimerView` shakes while it is on.
+///   The alarm loops bounded (one invalidated-on-stop timer, one observer,
+///   no per-tick state) for as long as the user ignores it.
+/// - **Focus-back → stop + auto-end + modal, NO confirm:** on
+///   `didBecomeActive` while alarming, the alarm stops and the session is
+///   auto-ended (`autoEndExpiredSession`) — SKIPPING the End/Cancel confirm
+///   (user-pinned in #33: the confirm remains for manual End only) — and
+///   the phase swaps to `.endingSession`: the standard #22 modal.
+/// - **Expiry while ACTIVE → no alarm, straight to auto-end + modal:** the
+///   next ~1 s watcher tick sees expired + focused and auto-ends directly.
+///   Whichever path lands first wins: a manual End in the sub-second window
+///   before the tick keeps its confirm and its wall-clock `ended_at`.
+/// - **Expiry-instant log semantics (the amendment):** the auto-end
+///   composes the retained result with
+///   `ended_at = started_at + duration` (the expiry instant — no overrun
+///   counted) and `focusedDuration` = the configured duration in whole
+///   minutes, so the modal shows the honest "N min focused". The #27 span
+///   reconciliation in `EndOfSessionFormState.makeLog` then guarantees the
+///   append invariant exactly: the wall span IS the duration, so
+///   `focused + paused == duration` minutes precisely (paused keeps the
+///   engine's pre-expiry pauses; any post-expiry time is excluded by the
+///   span, never logged as overrun).
+/// - **Cancel-resume of an expired session (#29 × #33):** the auto-end
+///   retains an EXPIRY-INSTANT snapshot (not the end-time one): focused
+///   accumulators pinned to exactly `duration`, pre-expiry paused seconds,
+///   `isPaused == false` (expiry is only reachable while running — focused
+///   freezes while paused), so Cancel restores the session AT its expiry
+///   state. Resuming an expired session counts further time as focused
+///   (the restore re-anchors a run segment; the engine's #12 semantics do
+///   the rest) and the NEXT end reconciles again through the ordinary #27
+///   composition. The expiry watcher does NOT re-fire for that session
+///   (the per-session watch state — see `ExpiryWatchState`): the user just
+///   chose to continue it; a fresh start re-arms the watcher.
+/// - **#13 recovery interplay:** an expired-but-unended session still
+///   recovers as today (the snapshot was persisted on start/cadence). A
+///   recovery RESTORE of an already-expired snapshot is marked handled by
+///   the same rule as cancel-resume (the user explicitly resumed it; no
+///   instant re-end), while a restore below the duration watches normally
+///   and will legitimately alarm/auto-end when it expires in-process. If
+///   the user instead force-quits while the alarm runs, recovery handles
+///   it unchanged on the next launch.
+/// - **Mini mode:** starting the alarm from mini restores the full timer
+///   (the shake is a full-window affordance; the alarm must be visible),
+///   reusing the existing epoch-driven window sync. The mini panel itself
+///   never shakes (documented engineer's choice).
+///
 /// # Break flow (issue #23, PRD §14)
 /// The opt-in break behind the post-submission choice: `takeBreak(duration:)`
 /// starts a `BreakTimerEngine` (default 5 minutes, configured at the choice
@@ -306,6 +370,18 @@ public final class AppModel {
         /// `.postSessionChoice`) AND by #27's discard (replaced by
         /// `.tasksView`).
         ///
+        /// Issue #33 adds a second, confirm-less ENTRANCE to this phase:
+        /// the expiry auto-end (the ~1 s watcher tick on expiry-while-
+        /// active, or the alarm's focus-back) swaps here directly — the
+        /// End/Cancel confirm remains for manual End only. On that path the
+        /// payload is the EXPIRY-INSTANT composition (engine unchanged, the
+        /// #27 precedent): the result's `endedAt` is pinned to
+        /// `startedAt + duration` — amending #12's accumulate-past-expiry,
+        /// no overrun is counted — with `focusedDuration` = the configured
+        /// duration in whole minutes, and the snapshot is the expiry-instant
+        /// state (focused == duration, pre-expiry pauses, `isPaused` false)
+        /// — exactly what Cancel restores. See the type documentation.
+        ///
         /// Submission is REQUIRED (§12.5): the phase stays here until
         /// `submitEndOfSession` lands (success or the typed partial
         /// outcome) or `cancelEndOfSession` (#29) restores the session;
@@ -455,6 +531,11 @@ public final class AppModel {
     /// Application Support; injected directory in tests).
     private let persistence: any ActiveSessionPersistence
     private let coordinator: ActiveSessionCoordinator
+    /// The #33 expiry alarm (its one AppKit seam — the system beep + the
+    /// activation watch; injectable for tests). Constructed here when not
+    /// injected; its callbacks are wired to the observable flag and the
+    /// focus-back auto-end below.
+    private let expiryAlarm: ExpiryAlarmController
     private var settings: AppSettings
 
     // MARK: - Observable state
@@ -521,6 +602,13 @@ public final class AppModel {
     /// Tasks view renders it as a dismissible banner (auto-expiring there);
     /// `dismissCompletionNotice()` clears it. nil = nothing to surface.
     public private(set) var completionNotice: CompletionNotice?
+    /// The #33 expiry-alarm flag: true exactly while the alarm controller
+    /// is beeping (`ExpiryAlarmController.isAlarming`, mirrored here through
+    /// its `onStateChange` callback so the observable layer drives the
+    /// shake animation). The alarm only runs while a session sits expired
+    /// with the app UNFOCUSED; it stops on focus-back (then the auto-end),
+    /// on any other session end (defensive), and on model teardown.
+    public private(set) var isExpiryAlarmActive = false
 
     // MARK: - Init
 
@@ -535,6 +623,10 @@ public final class AppModel {
     ///   - sessionClock: The engine's time source (production: real; tests:
     ///     a fake).
     ///   - autosaveInterval: The pinned cadence from #13.
+    ///   - expiryAlarm: The #33 alarm controller (injectable for tests —
+    ///     a production one with the real system-beep/activation probe is
+    ///     constructed when nil; its callbacks are wired to
+    ///     `isExpiryAlarmActive` and the focus-back auto-end either way).
     ///
     /// Construction is synchronous and performs no I/O: the stores are
     /// created when a path is stored, and the actual load + recovery
@@ -545,7 +637,8 @@ public final class AppModel {
         persistenceDirectory: URL = FileActiveSessionPersistence.defaultDirectory,
         scheduler: any ActiveSessionTickScheduler = SystemTickScheduler(),
         sessionClock: any FocusSessionClock = SystemFocusSessionClock(),
-        autosaveInterval: TimeInterval = AppModel.autosaveIntervalSeconds
+        autosaveInterval: TimeInterval = AppModel.autosaveIntervalSeconds,
+        expiryAlarm: ExpiryAlarmController? = nil
     ) {
         self.settings = settings
         let persistence = FileActiveSessionPersistence(directory: persistenceDirectory)
@@ -562,6 +655,18 @@ public final class AppModel {
             persistence: persistence,
             scheduler: scheduler,
             autosaveInterval: autosaveInterval)
+        let alarm = expiryAlarm ?? ExpiryAlarmController()
+        self.expiryAlarm = alarm
+        // Wired after full initialization (the closures capture self):
+        // the shake flag rides the alarm's state changes, and the focus-back
+        // signal runs the #33 auto-end (the controller already stopped the
+        // alarm before delivering it).
+        alarm.onStateChange = { [weak self] active in
+            self?.isExpiryAlarmActive = active
+        }
+        alarm.onFocusBack = { [weak self] in
+            self?.autoEndExpiredSession()
+        }
     }
 
     // MARK: - Startup
@@ -890,6 +995,12 @@ public final class AppModel {
         try coordinator.restore(from: snapshot)
         pendingSessionRecovery = nil
         sessionState = snapshot.isPaused ? .paused : .running
+        // Issue #33: a recovery restore of an ALREADY-EXPIRED snapshot is
+        // marked handled — the user explicitly resumed it, so the watcher
+        // must not instantly re-end it (same rule as the #29 cancel-resume
+        // of an auto-ended expiry); a restore below the duration watches
+        // normally and will legitimately expire later in this process.
+        expiryWatchState = expiryWatchState(forRestoredSnapshot: snapshot)
         return .restored
     }
 
@@ -1272,6 +1383,10 @@ public final class AppModel {
         onTask taskID: UUID, context: SessionContext, duration: TimeInterval
     ) throws -> SessionStartOutcome {
         try coordinator.start(taskID: taskID, duration: duration)
+        // Issue #33: a fresh session arms the expiry watcher — the next
+        // `evaluateSessionExpiry()` tick will alarm or auto-end when the
+        // configured duration is reached.
+        expiryWatchState = .watching
         sessionState = .running
         appPhase = .timerView(context)
         // A fresh session starts with no session number: the full TimerView
@@ -1368,6 +1483,12 @@ public final class AppModel {
         guard case .timerView(let context) = appPhase else {
             throw FocusSessionError.noActiveSession
         }
+        // Issue #33: stop the alarm defensively — a manual End requires the
+        // app focused (the alarm auto-ends on focus-back), so the alarm is
+        // normally already stopped; this covers the sub-second race where
+        // the confirm lands before the next watcher tick. The watcher is
+        // retired with the lifecycle (fresh sessions re-arm it).
+        expiryAlarm.stop()
         // Issue #29 pinned capture order: BEFORE coordinator.end() — after
         // end the engine is idle and capture returns nil. `FocusSessionResult`
         // carries neither the pause state nor the configured duration, so
@@ -1380,6 +1501,7 @@ public final class AppModel {
         sessionState = .idle
         isMiniTimerActive = false
         sessionNumberToday = nil
+        expiryWatchState = .idle
         appPhase = .endingSession(result, snapshot, context)
         return result
     }
@@ -1509,7 +1631,9 @@ public final class AppModel {
         // Step 4: the ending state is cleared — including the #29 retained
         // snapshot, which is DROPPED here (never restorable once logged);
         // the flow stops at the #23 post-session choice (Start Next Session
-        // / Take Break — nothing auto-starts).
+        // / Take Break — nothing auto-starts). The #33 watcher is retired
+        // with the lifecycle.
+        expiryWatchState = .idle
         appPhase = .postSessionChoice(completionFailure: nil)
         return .success
     }
@@ -1552,6 +1676,9 @@ public final class AppModel {
     /// precedent).
     func discardEndOfSession() {
         guard case .endingSession = appPhase else { return }
+        // Issue #33: retire the watcher with the lifecycle (hygiene — the
+        // engine is already idle, so the tick would no-op anyway).
+        expiryWatchState = .idle
         appPhase = .tasksView
     }
 
@@ -1640,10 +1767,177 @@ public final class AppModel {
         // phase — faithful restoration (running-at-end → running;
         // paused-at-end → paused).
         sessionState = snapshot.isPaused ? .paused : .running
+        // Issue #33: the expiry watch follows the restored state — a
+        // cancel-resume of an auto-ended (expired) session is marked
+        // HANDLED (no instant re-alarm/re-end of what the user just chose
+        // to continue); a cancel-resume of a non-expired manual end
+        // watches again and will legitimately expire later.
+        expiryWatchState = expiryWatchState(forRestoredSnapshot: snapshot)
         // Pinned step 3: the phase swap drops the retained ending state
         // (result + snapshot) and returns to the timer.
         appPhase = .timerView(context)
         return .restored
+    }
+
+    // MARK: - Expiry alarm + focus-back auto-end (issue #33)
+
+    /// The per-session expiry-watch state (issue #33). Private by design —
+    /// it is the model's internal latch ensuring the expiry action (alarm
+    /// or auto-end) fires EXACTLY ONCE per session lifecycle, and that a
+    /// cancel-resumed (or recovery-restored) expired session is not
+    /// instantly re-ended by the next ~1 s watcher tick.
+    private enum ExpiryWatchState {
+        /// No session lifecycle is open.
+        case idle
+        /// A session is live and its expiry is still ahead: the watcher
+        /// acts on it (alarm / auto-end) when `isExpired` flips true.
+        case watching
+        /// The expiry was already handled for this lifecycle: the alarm
+        /// fired (focus-back auto-end pending) or the auto-end ran, or the
+        /// session was restored from an already-expired snapshot
+        /// (cancel-resume / recovery). Fresh sessions re-arm via
+        /// `beginEngineSession`.
+        case handled
+    }
+
+    private var expiryWatchState: ExpiryWatchState = .idle
+
+    /// The watch state a RESTORED session resumes with (issue #33): a
+    /// snapshot already at or past its configured duration is `.handled` —
+    /// its expiry predates the restore and the user has explicitly chosen
+    /// to continue the session (re-firing would instantly re-end what they
+    /// just restored); a snapshot still below the duration watches again
+    /// (it will legitimately expire later in this process).
+    private func expiryWatchState(
+        forRestoredSnapshot snapshot: ActiveSessionSnapshot
+    ) -> ExpiryWatchState {
+        snapshot.accumulatedFocusedSeconds >= snapshot.duration
+            ? .handled : .watching
+    }
+
+    /// The ~1 s expiry-watch tick (issue #33): called by the timer views'
+    /// watch tasks (`TimerView`/`MiniTimerView`) while a session is active,
+    /// and directly by tests. Idempotent, cheap, and safe to call at any
+    /// rate — everything is guarded:
+    ///
+    /// 1. The watch state must be `.watching` (not handled/idle) — this is
+    ///    the exactly-once latch: while the alarm runs the user keeps
+    ///    ignoring, repeated ticks re-deliver nothing (no alarm restarts,
+    ///    no beep pile-up).
+    /// 2. A session must be live and `isExpired` true at the shared clock's
+    ///    current reading — the same pure engine predicate the countdown
+    ///    displays (detection granularity is therefore ~1 s, the tick
+    ///    cadence; the session state itself is untouched — the engine keeps
+    ///    its own honest accumulators).
+    /// 3. The decision (pinned): app ACTIVE → the alarm is pointless, go
+    ///    straight to `autoEndExpiredSession()`; app UNFOCUSED → start the
+    ///    alarm (first restoring the full timer from mini mode — the shake
+    ///    is a full-window affordance) and wait for focus-back, which the
+    ///    controller delivers via `onFocusBack` → auto-end.
+    public func evaluateSessionExpiry() {
+        guard expiryWatchState == .watching else { return }
+        guard coordinator.isActive else { return }
+        guard coordinator.isExpired(at: sessionClock.monotonicSeconds) else {
+            return
+        }
+        // Latch FIRST: from this instant the expiry is handled for this
+        // lifecycle, whatever branch runs below.
+        expiryWatchState = .handled
+        if expiryAlarm.isAppActive {
+            // Expiry while focused: no alarm needed (pinned) — straight to
+            // the auto-end + modal.
+            autoEndExpiredSession()
+        } else {
+            // Expiry while unfocused: alarm until the user focuses back.
+            if isMiniTimerActive { restoreFromMiniTimer() }
+            expiryAlarm.start()
+        }
+    }
+
+    /// The auto-end of an expired session (issue #33) — the shared tail of
+    /// BOTH expiry paths (focus-back during the alarm, and expiry-while-
+    /// active). Ends the session at the EXPIRY instant and enters the
+    /// standard #22 end-of-session modal WITHOUT the End/Cancel confirm
+    /// (user-pinned: the confirm remains for manual End only):
+    ///
+    /// 1. The alarm is stopped first (no-op when it never ran — the
+    ///    expiry-while-active path), so the shake flag and beeps end before
+    ///    any ending work.
+    /// 2. The end-time snapshot is captured BEFORE `coordinator.end()` (the
+    ///    #29 pinned capture order — after end the engine is idle and
+    ///    capture returns nil).
+    /// 3. `coordinator.end()` runs (engine result + the #13 clear-on-end
+    ///    snapshot wipe — the session completed, so clearing is right).
+    /// 4. **The composition-layer amendment (engine UNCHANGED, like #27):**
+    ///    the retained `FocusSessionResult` is composed with
+    ///    `endedAt = startedAt + duration` (the expiry instant — no overrun
+    ///    counted, amending #12's accumulate-past-expiry) and
+    ///    `focusedDuration` = the configured duration in whole minutes (the
+    ///    #12 rounding rule via `EndOfSessionFormState.nearestMinute`), so
+    ///    the modal shows the honest "N min focused". The #27 span formula
+    ///    in `makeLog` then reconciles EXACTLY: the wall span IS the
+    ///    duration, so `focused + paused == duration` minutes and any
+    ///    post-expiry time (which the engine kept accumulating) is excluded
+    ///    by the span, never logged as overrun. `pausedDuration` carries
+    ///    the engine's value — the pre-expiry pauses (exact on the
+    ///    focus-back path, where no pause click can be delivered while the
+    ///    app is unfocused; on the expiry-while-active path the watcher
+    ///    fires within ~1 s, bounding any post-expiry drift to that
+    ///    sub-second window — documented honest bound).
+    /// 5. The `.endingSession` snapshot payload is the EXPIRY-INSTANT
+    ///    state, not the end-time one: focused accumulators pinned to
+    ///    exactly `duration` (the definition of expiry), pre-expiry paused
+    ///    seconds, `pauseCount` as of end, and `isPaused == false` (expiry
+    ///    is only reachable while running — focused freezes while paused).
+    ///    This is what Cancel (#29) restores: the session AT its expiry
+    ///    state, consistent with `ended_at = expiry` — further time then
+    ///    counts as focused and the next end reconciles again via #27.
+    /// 6. The standard end-flow state updates (session idle, mini flag and
+    ///    the #20 session-number snapshot cleared) and the phase swap —
+    ///    the app shell presents the modal over the timer (ONE path).
+    ///
+    /// Every guard failure (`no .timerView`, idle engine) is a caller
+    /// contract violation — the only call sites are the watcher and the
+    /// focus-back handler, both of which run while the session is live and
+    /// on the timer — so failures are silent no-ops rather than thrown
+    /// errors (there is no UI to surface them to on these paths).
+    private func autoEndExpiredSession() {
+        // Stop the alarm first (spec order; no-op when it never ran).
+        expiryAlarm.stop()
+        guard case .timerView(let context) = appPhase else { return }
+        // #29 pinned capture order: BEFORE coordinator.end().
+        guard let endSnapshot = coordinator.captureSnapshot() else { return }
+        let raw: FocusSessionResult
+        do {
+            raw = try coordinator.end()
+        } catch {
+            // Unreachable (the capture above proved a live lifecycle) —
+            // fail closed without touching anything.
+            return
+        }
+        let corrected = FocusSessionResult(
+            sessionID: raw.sessionID,
+            taskID: raw.taskID,
+            startedAt: raw.startedAt,
+            endedAt: raw.startedAt.addingTimeInterval(endSnapshot.duration),
+            focusedDuration: EndOfSessionFormState.nearestMinute(
+                fromSeconds: endSnapshot.duration),
+            pauseCount: raw.pauseCount,
+            pausedDuration: raw.pausedDuration)
+        let snapshot = ActiveSessionSnapshot(
+            sessionID: endSnapshot.sessionID,
+            taskID: endSnapshot.taskID,
+            duration: endSnapshot.duration,
+            startedAt: endSnapshot.startedAt,
+            accumulatedFocusedSeconds: endSnapshot.duration,
+            accumulatedPausedSeconds: endSnapshot.accumulatedPausedSeconds,
+            pauseCount: endSnapshot.pauseCount,
+            isPaused: false,
+            segmentStartMonotonic: endSnapshot.segmentStartMonotonic)
+        sessionState = .idle
+        isMiniTimerActive = false
+        sessionNumberToday = nil
+        appPhase = .endingSession(corrected, snapshot, context)
     }
 
     // MARK: - Break flow (issue #23, PRD §14)

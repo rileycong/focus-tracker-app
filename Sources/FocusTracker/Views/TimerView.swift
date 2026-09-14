@@ -64,6 +64,26 @@ import SwiftUI
 /// The `SessionTimerPlaceholderView` this replaces was **deleted** (its
 /// rationale was absorbed into the sections above); the real file is the
 /// honest home and a reduced stub would only be a second thing to maintain.
+///
+/// # Expiry alarm + shake (issue #33, PRD §9.5)
+/// When the app is UNFOCUSED at expiry the model starts the in-app alarm
+/// (`AppModel.isExpiryAlarmActive` — repeated system beeps ~1×/s inside the
+/// `ExpiryAlarmController`, the alarm's one AppKit seam) and this view
+/// shakes the timer layout: a small horizontal wobble (`shakeAmplitude`,
+/// deliberately subtle within the dark-calm language — the ring, count and
+/// controls stay put visually; nothing flashes or screams). The shake is
+/// driven purely by the observable flag via `.onChange` (a `repeatForever`
+/// ease wobble while alarming, an ease-out settle on stop — including the
+/// auto-end that follows focus-back). Expiry while the app IS focused never
+/// alarms: the watcher tick auto-ends straight to the #22 modal.
+///
+/// The view also owns one half of the expiry DETECTION: a `.task` watch
+/// loop calls `AppModel.evaluateSessionExpiry()` about once per second for
+/// this view's lifetime (idempotent, guarded — it no-ops when no unexpired
+/// watchable session is live, so it is harmless under `.endingSession`,
+/// where this view re-renders beneath the modal). `MiniTimerView` runs the
+/// same loop so mini mode is covered; detection is therefore within ~1 s of
+/// `remainingSeconds` hitting 0 — the same cadence as the countdown itself.
 struct TimerView: View {
     /// The running session's display context (resolved at start, issue #19).
     let context: AppModel.SessionContext
@@ -72,6 +92,13 @@ struct TimerView: View {
     /// `sessionClock`, `pauseSession`/`resumeSession`/`endSession`,
     /// `dailyLogStore`) every layer uses.
     let model: AppModel
+
+    /// The shake offset while the #33 expiry alarm is active (see the type
+    /// documentation): 0 at rest, `shakeAmplitude` at the wobble's edge.
+    @State private var shakeOffset: CGFloat = 0
+    /// The shake amplitude (issue #33): deliberately small — an attention
+    /// wobble, not a seizure (the dark-calm language, PRD §21).
+    private static let shakeAmplitude: CGFloat = 4
 
     @State private var showsEndConfirmation = false
 
@@ -95,6 +122,23 @@ struct TimerView: View {
                 controls
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
+            // Issue #33: the shake rides the observable alarm flag — a
+            // repeating ease wobble while alarming, a quick settle on stop
+            // (the auto-end that follows focus-back). Applied to the whole
+            // layout so the ring, countdown and controls wobble together;
+            // subtle amplitude, no color/flash changes (dark-calm, §21).
+            .offset(x: shakeOffset)
+            .onChange(of: model.isExpiryAlarmActive) { _, alarming in
+                if alarming {
+                    withAnimation(
+                        .easeInOut(duration: 0.09).repeatForever(autoreverses: true)
+                    ) {
+                        shakeOffset = Self.shakeAmplitude
+                    }
+                } else {
+                    withAnimation(.easeInOut(duration: 0.2)) { shakeOffset = 0 }
+                }
+            }
         }
         .background(DesignTokens.background)
         .confirmationDialog(
@@ -116,6 +160,19 @@ struct TimerView: View {
             // no refetch while the ending flow drives.
             if model.isSessionActive {
                 await loadSessionNumber()
+            }
+        }
+        .task {
+            // The #33 expiry watch (issue #33): ~1 s ticks driving the
+            // alarm/auto-end decision. Idempotent and fully guarded — it
+            // no-ops whenever no unhandled expiry is pending, so it is
+            // harmless under `.endingSession` (this view re-renders beneath
+            // the modal there) and in every other phase. `MiniTimerView`
+            // runs the same loop so the collapsed mini panel is covered
+            // too.
+            while !Task.isCancelled {
+                try? await Task.sleep(for: .seconds(1))
+                model.evaluateSessionExpiry()
             }
         }
     }

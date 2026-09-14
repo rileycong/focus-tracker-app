@@ -57,6 +57,16 @@ import SwiftUI
 /// restores the main window showing the timer with the blocking
 /// end-of-session modal over it (the ONE presentation path, in the app
 /// shell). Submission returns the app to Tasks.
+///
+/// # Expiry watch (issue #33)
+/// This view runs the same ~1 s `evaluateSessionExpiry()` watch loop as the
+/// full timer (see its type documentation), so mini mode is covered for the
+/// expiry alarm/auto-end: while collapsed this panel is the visible surface,
+/// and an expiry while unfocused starts the alarm — which restores the FULL
+/// timer (the model's `restoreFromMiniTimer()` on the alarm path) so the
+/// pinned shake is actually visible. The mini panel itself deliberately
+/// never shakes (engineer's choice, documented) — beeps plus the restored
+/// shaking full window are the alarm's surface here.
 struct MiniTimerView: View {
     /// The running session's display context (resolved at start, issue #19;
     /// passed through the panel controller).
@@ -97,6 +107,19 @@ struct MiniTimerView: View {
             Text(
                 "The session ends now. A short wrap-up form opens before the app returns to the tasks."
             )
+        }
+        .task {
+            // The #33 expiry watch (issue #33): the same ~1 s idempotent
+            // loop the full `TimerView` runs, so mini mode is covered too —
+            // the mini panel is the visible surface while collapsed (and
+            // the main window is ordered out), and expiry while unfocused
+            // starts the alarm (which restores the full timer so the shake
+            // is actually visible). Fully guarded — no-ops unless an
+            // unhandled expiry is pending on a live session.
+            while !Task.isCancelled {
+                try? await Task.sleep(for: .seconds(1))
+                model.evaluateSessionExpiry()
+            }
         }
     }
 
