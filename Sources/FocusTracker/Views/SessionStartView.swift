@@ -4,6 +4,14 @@ import SwiftUI
 /// like the #16/#17 sheet requests. Fresh identity per presentation (the
 /// `let id = UUID()` pattern of `TaskFormRequest`), plus the optional
 /// preselected target for the row context-menu entry points.
+///
+/// Issue #34 generalizes the pre-selection: with no row hand-off (the
+/// toolbar entry passes nil), `TasksView` composes the model's #34
+/// last-session target (`lastSessionTargetID`) — every entry point
+/// pre-selects the previous session's task when it is still planning-
+/// eligible; the eligibility filter lives in
+/// `SessionStartPicker.preselectedTargetID(requesting:in:)`, applied by
+/// the sheet on appear.
 struct SessionStartRequest: Identifiable {
     let id = UUID()
     /// The task/subtask ID pre-selected in the picker (issue #19
@@ -54,13 +62,21 @@ struct SessionStartView: View {
     /// The category combobox's suggestion list (#16 pattern:
     /// `TaskFormState.knownCategoryNames(in:)`, gathered by `TasksView`).
     let knownCategoryNames: [String]
-    /// The preselected target ID (see `SessionStartRequest`).
+    /// The preselected target ID: a row's context-menu hand-off (#19), or
+    /// the caller's #34 composition (row hand-off, else the last session's
+    /// target) — filtered for eligibility on appear (see the body).
     let preselectedTargetID: UUID?
     /// The start handler over an existing target (→ `AppModel.startSession`).
     let onStart: (UUID, TimeInterval) async throws -> AppModel.SessionStartOutcome
     /// The ad-hoc start handler (→ `AppModel.startAdHocSession`).
     let onStartAdHoc: (String, [String], TimeInterval) async throws
         -> AppModel.SessionStartOutcome
+
+    /// Cancel behavior (issue #34): the phase-driven session-start
+    /// presentation is not a dismissal context, so the app shell hands
+    /// over `AppModel.cancelSessionStart()`; the #19 Tasks-presented
+    /// sheet passes nothing and keeps the `dismiss()` fallback.
+    var onCancel: (() -> Void)? = nil
 
     @Environment(\.dismiss) private var dismiss
     @State private var mode: Mode = .pick
@@ -134,13 +150,16 @@ struct SessionStartView: View {
         .frame(width: 460, height: 500)
         .background(DesignTokens.background)
         .onAppear {
-            // The row context-menu nice-to-have: pre-select the requested
-            // target when it is eligible (#19, documented on
-            // `SessionStartRequest`).
-            if selectedTargetID == nil,
-                eligibleTargets.contains(where: { $0.id == preselectedTargetID })
-            {
-                selectedTargetID = preselectedTargetID
+            // The pre-selection (issue #34, generalizing the #19 row
+            // context-menu nice-to-have): the caller's requested target —
+            // the last session's task for the #34 phase-driven and manual
+            // entries, a row's ID for the context-menu entry — pre-selects
+            // when it is planning-eligible in the presented inventory
+            // (`SessionStartPicker.preselectedTargetID(requesting:in:)`).
+            // Done/Blocked/Dropped or absent → no selection.
+            if selectedTargetID == nil {
+                selectedTargetID = SessionStartPicker.preselectedTargetID(
+                    requesting: preselectedTargetID, in: tasks)
             }
         }
     }
@@ -328,7 +347,13 @@ struct SessionStartView: View {
                         .multilineTextAlignment(.trailing)
                 }
                 Spacer()
-                Button("Cancel") { dismiss() }
+                Button("Cancel") {
+                    // Issue #34: the phase-driven presentation routes
+                    // through the caller's onCancel (the phase owns the
+                    // presentation); the Tasks-presented sheet keeps the
+                    // plain dismiss.
+                    if let onCancel { onCancel() } else { dismiss() }
+                }
                     .keyboardShortcut(.cancelAction)
                 Button {
                     start()

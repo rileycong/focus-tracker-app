@@ -567,9 +567,9 @@ final class AppModelSessionStartTests: XCTestCase {
         XCTAssertEqual(outcome, .success)
         XCTAssertEqual(model.appPhase, .postSessionChoice(completionFailure: nil))
 
-        // The choice's Start Next Session is what returns to Tasks (nothing
-        // auto-starts or auto-opens, issue #23 criterion 4).
+        // The choice's Start Next Session opens the session-start sheet
+        // directly (issue #34, amending #23's pinned Tasks return).
         model.chooseStartNextSession()
-        XCTAssertEqual(model.appPhase, .tasksView)
+        XCTAssertEqual(model.appPhase, .sessionStart)
     }
 }

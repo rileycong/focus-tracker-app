@@ -47,6 +47,63 @@ final class SessionStartPickerTests: XCTestCase {
         targets.map(\.id)
     }
 
+    // MARK: - Pre-selection (issue #34)
+
+    func testPreselectionReturnsAnEligibleRequestedID() {
+        let tasks = [
+            task(Self.a, status: .toDo),
+            task(Self.b, status: .inProgress),
+        ]
+        XCTAssertEqual(
+            SessionStartPicker.preselectedTargetID(requesting: Self.b, in: tasks),
+            Self.b, "an eligible ID pre-selects itself")
+        XCTAssertEqual(
+            SessionStartPicker.preselectedTargetID(requesting: Self.a, in: tasks),
+            Self.a)
+    }
+
+    func testPreselectionIsClearedForDoneBlockedDroppedAndAbsentIDs() {
+        let tasks = [
+            task(Self.a, status: .done),
+            task(Self.b, status: .blocked),
+            task(Self.c, status: .dropped),
+        ]
+        XCTAssertNil(
+            SessionStartPicker.preselectedTargetID(requesting: Self.a, in: tasks),
+            "Done previous task → no pre-selection")
+        XCTAssertNil(
+            SessionStartPicker.preselectedTargetID(requesting: Self.b, in: tasks),
+            "Blocked previous task → no pre-selection")
+        XCTAssertNil(
+            SessionStartPicker.preselectedTargetID(requesting: Self.c, in: tasks),
+            "Dropped previous task → no pre-selection")
+        XCTAssertNil(
+            SessionStartPicker.preselectedTargetID(requesting: UUID(), in: tasks),
+            "absent previous task → no pre-selection")
+    }
+
+    func testPreselectionIsNilWithoutARequest() {
+        let tasks = [task(Self.a, status: .toDo)]
+        XCTAssertNil(
+            SessionStartPicker.preselectedTargetID(requesting: nil, in: tasks),
+            "no request → the current #19 behavior (unselected picker)")
+    }
+
+    func testPreselectionAcceptsAnEligibleSubtaskAtAnyDepth() {
+        let tasks = [
+            task(Self.a, subtasks: [
+                subtask(Self.s1, children: [subtask(Self.deep)]),
+            ]),
+        ]
+        XCTAssertEqual(
+            SessionStartPicker.preselectedTargetID(requesting: Self.s1, in: tasks),
+            Self.s1)
+        XCTAssertEqual(
+            SessionStartPicker.preselectedTargetID(requesting: Self.deep, in: tasks),
+            Self.deep)
+    }
+
+
     // MARK: - Eligibility: tasks
 
     func testToDoAndInProgressTasksAreEligible() {
@@ -280,4 +337,5 @@ final class SessionStartFormLogicTests: XCTestCase {
         XCTAssertTrue(copies.allSatisfy { !$0.isEmpty })
         XCTAssertEqual(Set(copies).count, copies.count, "no two refusals share copy")
     }
+
 }

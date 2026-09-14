@@ -128,7 +128,7 @@ final class AppModelMiniTimerEpochTests: XCTestCase {
         let outcome = try await model.submitEndOfSession(form)
         XCTAssertEqual(outcome, .success)
         model.chooseStartNextSession()
-        XCTAssertEqual(model.appPhase, .tasksView)
+        XCTAssertEqual(model.appPhase, .sessionStart)
     }
 
     // MARK: - Epoch basics (issue #31)

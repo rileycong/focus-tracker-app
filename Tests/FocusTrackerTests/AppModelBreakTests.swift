@@ -6,7 +6,7 @@ private typealias SessionContext = AppModel.SessionContext
 
 /// Tests for the #23 `AppModel` break flow (issue #23): the post-submission
 /// choice routing (after `.success` AND `.completionFailedAfterLog`, never
-/// after `.logAppendFailed`), Start Next Session → `.tasksView` with nothing
+/// after `.logAppendFailed`), Start Next Session → `.sessionStart (#34)` with nothing
 /// logged, the break lifecycle through the model (custom duration, expiry →
 /// observable expired state → path back), the END-day `appendBreak`
 /// parse-back with consistent fields, the end-early actual duration, the
@@ -196,16 +196,16 @@ final class AppModelBreakTests: XCTestCase {
 
     // MARK: - Choice after .success; Start Next Session (criteria 1 + 4)
 
-    func testStartNextSessionReturnsToTasksViewAndLogsNothing() async throws {
+    func testStartNextSessionOpensSessionStartAndLogsNothing() async throws {
         let taskID = UUID()
         try writeTaskFile("Choice task", id: taskID, in: vaultURL)
         let model = await makeConfiguredModel()
         let result = try await runSessionToChoice(on: model, taskID: taskID)
 
-        // PINNED: Start Next Session → .tasksView, nothing auto-opens and
+        // PINNED: Start Next Session → .sessionStart (#34), nothing auto-opens and
         // nothing auto-starts.
         model.chooseStartNextSession()
-        XCTAssertEqual(model.appPhase, .tasksView)
+        XCTAssertEqual(model.appPhase, .sessionStart)
         XCTAssertFalse(model.isSessionActive, "no session auto-started")
         XCTAssertFalse(model.isBreakActive, "no break auto-begun")
 
@@ -256,7 +256,7 @@ final class AppModelBreakTests: XCTestCase {
         // appears CARRYING the partial-outcome failure for the inline #22
         // warning (criterion 3).
         model.chooseStartNextSession()
-        XCTAssertEqual(model.appPhase, .tasksView)
+        XCTAssertEqual(model.appPhase, .sessionStart)
         _ = try await startRunningSession(on: model, taskID: partialTaskID)
         try runPinnedTelemetry(on: model)
         _ = try model.endSession()
@@ -320,7 +320,7 @@ final class AppModelBreakTests: XCTestCase {
             XCTFail("expected .logged(...), got \(String(describing: outcome))")
             return
         }
-        XCTAssertEqual(model.appPhase, .tasksView)
+        XCTAssertEqual(model.appPhase, .sessionStart)
         XCTAssertFalse(model.isBreakActive)
         XCTAssertNil(model.pendingBreakLogWarning)
 
@@ -352,7 +352,7 @@ final class AppModelBreakTests: XCTestCase {
             XCTFail("expected .logged(...), got \(String(describing: outcome))")
             return
         }
-        XCTAssertEqual(model.appPhase, .tasksView)
+        XCTAssertEqual(model.appPhase, .sessionStart)
 
         // The ACTUAL shorter duration is what lands in the file: 130 s →
         // nearest minute 2, with the reconciled invariant span.
@@ -446,7 +446,7 @@ final class AppModelBreakTests: XCTestCase {
 
     // MARK: - Break log failure: typed, non-blocking (criterion 18)
 
-    func testBreakLogFailureIsTypedNonBlockingAndStillReachesTasksView()
+    func testBreakLogFailureIsTypedNonBlockingAndStillReachesSessionStart()
         async throws
     {
         let taskID = UUID()
@@ -474,9 +474,9 @@ final class AppModelBreakTests: XCTestCase {
             path,
             vaultURL.appendingPathComponent("Logs", isDirectory: true)
                 .path(percentEncoded: false))
-        // NON-BLOCKING by pinned design: the flow still reaches .tasksView,
+        // NON-BLOCKING by pinned design: the flow still reaches .sessionStart (#34),
         // the break is over, and the small warning is surfaced.
-        XCTAssertEqual(model.appPhase, .tasksView)
+        XCTAssertEqual(model.appPhase, .sessionStart)
         XCTAssertFalse(model.isBreakActive)
         XCTAssertEqual(model.pendingBreakLogWarning, error.description)
         // Nothing was written — the obstruction is untouched.

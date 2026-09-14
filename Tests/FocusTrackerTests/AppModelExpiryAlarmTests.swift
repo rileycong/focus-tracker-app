@@ -487,7 +487,7 @@ final class AppModelExpiryAlarmTests: XCTestCase {
         XCTAssertEqual(outcome, .success)
         XCTAssertEqual(model.appPhase, .postSessionChoice(completionFailure: nil))
         model.chooseStartNextSession()
-        XCTAssertEqual(model.appPhase, .tasksView)
+        XCTAssertEqual(model.appPhase, .sessionStart)
 
         // A fresh session re-arms the watcher: it alarms at ITS expiry.
         _ = try await startRunningSession(on: model, taskID: secondID, duration: 60)

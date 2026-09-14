@@ -196,7 +196,8 @@ import Observation
 /// auto-start. `endBreak()` serves both the End-break-early control and the
 /// post-expiry path back: engine end → `BreakLog` composed from the result →
 /// `DailyLogStore.appendBreak` to the END day via `logDay(forEndedAt:)`
-/// reused AS-IS → `.tasksView` in every outcome. Log failure is NON-BLOCKING
+/// reused AS-IS → `.sessionStart` in every outcome (#34 amendment — was:
+/// `.tasksView`). Log failure is NON-BLOCKING
 /// by pinned design (small warning + continue — documented divergence from
 /// the session flow's retry-in-place). While a break runs,
 /// `startSession`/`startAdHocSession` refuse (`.breakActive`), and so does
@@ -204,6 +205,31 @@ import Observation
 /// the choice phase the starts refuse too (`.postSessionChoiceActive`) but
 /// `setVaultPath` does not — nothing is pending a write yet.
 ///
+/// # Direct session-start routing + last-task pre-selection (issue #34)
+/// Issue #34 AMENDS #23's pinned exit routing (documented at every
+/// affected site): the post-session choice's **Start Next Session** and
+/// EVERY break end (`endBreak` — the expiry acknowledgment, the early
+/// end, and the non-blocking log-failure path) swap the phase to
+/// `.sessionStart`, presenting the #19 session-start sheet DIRECTLY
+/// (was: `.tasksView`). The menu always shows and nothing auto-starts
+/// — the user still confirms duration and presses Start (the #23
+/// non-goals hold; only the landing screen changed). The sheet
+/// pre-selects `lastSessionTargetID` — the task/subtask of the most
+/// recent successful start (recorded by `beginEngineSession` for BOTH
+/// entry points; in-memory only: it survives end/submit/cancel/discard,
+/// is overwritten by the next start, and dies with the process, per the
+/// user's "has not quit the application" scoping) — filtered at
+/// presentation time by current eligibility
+/// (`SessionStartPicker.preselectedTargetID(requesting:in:)`: still in
+/// the inventory, not Done/Blocked/Dropped), so a Done or gone previous
+/// task leaves the picker unselected. The manual toolbar entry
+/// (TasksView) composes the same pre-selection for its sheet. The
+/// sheet's Cancel routes through `cancelSessionStart()` back to
+/// `.tasksView`. Starts are NOT refused while `.sessionStart` is up —
+/// it IS the start surface. Ad-hoc mode is unaffected; the duration
+/// default stays 25.
+///
+
 /// # Concurrency shape
 /// `@MainActor` throughout: all mutable state is main-actor isolated, the
 /// actor stores are bridged with `await`, and the lock-synchronized
@@ -434,6 +460,31 @@ public final class AppModel {
         /// `appendBreak` through the current stores, §18). Only the user's
         /// actions leave it — no auto-dismiss, no auto-start (§14.3).
         case breakActive
+        /// The phase-driven session-start presentation (issue #34,
+        /// AMENDING #23's pinned exit routing): the app shows the #19
+        /// session-start sheet DIRECTLY. Two entrances: the post-session
+        /// choice's **Start Next Session** (was: `.tasksView` — the #23
+        /// "no auto-open" decision is reversed by user request; the menu
+        /// still shows and nothing auto-STARTS: the user still confirms
+        /// duration and presses Start) and every break end (`endBreak` —
+        /// the expiry acknowledgment and the early end alike, after the
+        /// `appendBreak` write lands, including its non-blocking failure
+        /// path). Payload-free (engineer's choice, documented): the sheet
+        /// derives tasks, category names and the #34 pre-selection from
+        /// the model's current state (`lastSessionTargetID`), exactly as
+        /// the shell derives every other view's inputs; eligibility is
+        /// filtered by the sheet via
+        /// `SessionStartPicker.preselectedTargetID(requesting:in:)` — a
+        /// Done/Blocked/Dropped or absent previous task leaves the picker
+        /// unselected. Unlike `.postSessionChoice`, starts are NOT refused
+        /// here — this phase IS the start surface: the sheet's controls
+        /// run the ordinary #19 flow and swap to `.timerView` on success.
+        /// `setVaultPath` does not refuse either (nothing is pending a
+        /// write — the `.postSessionChoice` policy). The sheet's Cancel
+        /// routes through `cancelSessionStart()` back to `.tasksView`
+        /// (no dismissal environment to fall back on — the phase owns
+        /// the presentation).
+        case sessionStart
     }
 
     /// The typed outcome of the #19 start orchestration (`Equatable` for
@@ -556,11 +607,14 @@ public final class AppModel {
     /// non-nil exactly while a recovered snapshot awaits the user's
     /// restore/discard choice. nil = no pending decision.
     public private(set) var pendingSessionRecovery: ActiveSessionSnapshot?
-    /// Which screen the app shows (see `AppPhase`, issue #19 + #22 + #23).
-    /// Starts on the Tasks view; the #19 start flow swaps it to
+    /// Which screen the app shows (see `AppPhase`, issues #19 + #22 + #23
+    /// + #34). Starts on the Tasks view; the #19 start flow swaps it to
     /// `.timerView`, the #22 confirm swaps it to `.endingSession`, the
     /// required modal submission moves the flow to `.postSessionChoice`
-    /// (#23), and the choice's two controls (or the break flow) return it to
+    /// (#23), and — the #34 amendment of #23's pinned exit — the choice's
+    /// **Start Next Session** and every break end swap to `.sessionStart`
+    /// (the session-start sheet, directly); only the sheet's Cancel
+    /// (`cancelSessionStart()`) and the #27 discard return to
     /// `.tasksView`.
     public private(set) var appPhase: AppPhase = .tasksView
     /// Mini-mode flag (issue #21, PRD §10.2): true exactly while the main
@@ -609,6 +663,21 @@ public final class AppModel {
     /// with the app UNFOCUSED; it stops on focus-back (then the auto-end),
     /// on any other session end (defensive), and on model teardown.
     public private(set) var isExpiryAlarmActive = false
+    /// The task/subtask ID of the most recent successfully STARTED
+    /// session (issue #34): recorded by `beginEngineSession` — the shared
+    /// tail of both #19 entry points (existing target and ad-hoc) — and
+    /// handed to the session-start sheet as its pre-selection candidate.
+    /// In-memory ONLY, by pinned design: the user scoped the pre-selection
+    /// to "has not quit the application", so nothing is persisted and a
+    /// fresh `AppModel` (a relaunch) starts with nil — there is no clear
+    /// call, the value simply dies with the model instance. It survives
+    /// the session's end, submission, cancel and discard (it records the
+    /// START, not the lifecycle) and is overwritten by every next
+    /// successful start. The sheet filters it by current eligibility
+    /// (still in the inventory, not Done/Blocked/Dropped) at presentation
+    /// time — the tracking itself is kept unconditional so the model
+    /// stays an honest "what did I last work on".
+    public private(set) var lastSessionTargetID: UUID?
 
     // MARK: - Init
 
@@ -1393,6 +1462,10 @@ public final class AppModel {
         // re-fetches its own #20 snapshot on appear (issue #21 criterion 2 —
         // a stale number from a previous session is never shown).
         sessionNumberToday = nil
+        // Issue #34: the start just succeeded — record the session's
+        // target for the session-start sheet's pre-selection (in-memory
+        // only; survives end/submit/cancel, dies with the process).
+        lastSessionTargetID = taskID
         return .started(context)
     }
 
@@ -1948,21 +2021,25 @@ public final class AppModel {
     /// **Non-blocking by pinned design (documented divergence from the
     /// session flow's retry-in-place, #22):** a log failure does NOT trap
     /// the break UX — a small warning is surfaced
-    /// (`pendingBreakLogWarning`) and the flow continues to `.tasksView`.
-    /// Rationale: the break is transient and in-memory only (nothing is
-    /// retained to retry with — the engine result and the composed log are
-    /// the only copies, both dropped with the flow), `duration` is the
-    /// single field of record, and a lost break log is the accepted, stated
+    /// (`pendingBreakLogWarning`) and the flow continues. Rationale: the
+    /// break is transient and in-memory only (nothing is retained to
+    /// retry with — the engine result and the composed log are the only
+    /// copies, both dropped with the flow), `duration` is the single
+    /// field of record, and a lost break log is the accepted, stated
     /// loss. The session flow retains its result because it is the ONLY
     /// copy of the session (§18); a break has no such standing.
+    ///
+    /// Exit routing (issue #34, amending #23): BOTH outcomes land on the
+    /// `.sessionStart` phase — the session-start sheet opens directly
+    /// (was: `.tasksView`).
     public enum BreakLogOutcome: Equatable, Sendable {
         /// The break was logged to its END day file; the phase is
-        /// `.tasksView`.
+        /// `.sessionStart` (#34).
         case logged(BreakLog)
         /// The append failed — nothing was written (validation runs before
         /// I/O and the append is atomic). NON-BLOCKING: the warning is
-        /// surfaced and the flow still continues to `.tasksView` (see the
-        /// type documentation).
+        /// surfaced and the flow still continues to `.sessionStart` (#34;
+        /// see the type documentation).
         case logFailed(BreakLog, DailyLogError)
     }
 
@@ -1976,9 +2053,9 @@ public final class AppModel {
 
     /// The small non-blocking warning surfaced after a break-log append
     /// failure (issue #23 criterion 18): rendered by the app shell as a
-    /// small banner; the flow continues to `.tasksView` either way. Cleared
-    /// by the next `takeBreak` (a fresh break context) and by the next
-    /// successful `endBreak`.
+    /// small banner; the flow continues to `.sessionStart` either way
+    /// (#34 amendment). Cleared by the next `takeBreak` (a fresh break
+    /// context) and by the next successful `endBreak`.
     public private(set) var pendingBreakLogWarning: String?
 
     /// Whether a break is currently running (the `.breakActive` phase).
@@ -2030,29 +2107,54 @@ public final class AppModel {
         appPhase = .breakActive
     }
 
-    /// Start Next Session (issue #23 criterion 4, PINNED): returns to
-    /// `.tasksView` and does NOT auto-open the session-start sheet and does
-    /// NOT auto-start anything — the user picks a task and starts normally
-    /// via #19 (PRD §20.7 "Return to task/session selection"; §14.3's
-    /// rationale — the next session requires selecting a task). A typed
-    /// no-op outside the choice phase (the control only exists there, the
+    /// Start Next Session (issue #23 criterion 4; exit routing AMENDED
+    /// by #34): swaps the phase to `.sessionStart` — the #19 session-start
+    /// sheet opens DIRECTLY. This amends #23's pinned "return to
+    /// `.tasksView`, no auto-open" decision at the user's request: the
+    /// menu still shows and nothing auto-STARTS (the user still picks
+    /// duration and confirms Start — §14.1's nothing-auto-starts holds;
+    /// §20.7's "return to task/session selection" is now literal). The
+    /// previous session's target pre-selects in the sheet when still
+    /// eligible (#34, via `lastSessionTargetID`). A typed no-op outside
+    /// the choice phase (the control only exists there, the
     /// `collapseToMiniTimer` guard precedent).
     public func chooseStartNextSession() {
         guard case .postSessionChoice = appPhase else { return }
+        appPhase = .sessionStart
+    }
+
+    /// Cancels the phase-driven session-start sheet (issue #34): back to
+    /// `.tasksView`. The sheet's Cancel button routes here (the phase owns
+    /// the presentation — a plain `dismiss()` would leave the phase
+    /// stranded); the tracking (`lastSessionTargetID`) is deliberately
+    /// untouched — canceling the menu is not ending the loop. A typed
+    /// no-op outside `.sessionStart` (the control only exists on the
+    /// sheet presented for that phase — the `chooseStartNextSession`
+    /// guard precedent).
+    public func cancelSessionStart() {
+        guard case .sessionStart = appPhase else { return }
         appPhase = .tasksView
     }
 
     /// Ends the active break — the ONE API behind the End-break-early
-    /// control AND the post-expiry path back (issue #23 criteria 14/16; one
-    /// behavior, two labels in the UI): the engine `end()` result composes
-    /// the `BreakLog` (#11 type, actual — post-expiry clamped — duration),
-    /// which is appended via `DailyLogStore.appendBreak` to the break's END
-    /// day: `AppModel.logDay(forEndedAt:)` reused AS-IS (a break spanning
-    /// midnight logs to its end day). The phase returns to `.tasksView` in
-    /// EVERY outcome — the break UX must never trap.
+    /// control AND the post-expiry acknowledgment (issue #23 criteria
+    /// 14/16; one behavior, two labels in the UI): the engine `end()`
+    /// result composes the `BreakLog` (#11 type, actual — post-expiry
+    /// clamped — duration), which is appended via `DailyLogStore
+    /// .appendBreak` to the break's END day:
+    /// `AppModel.logDay(forEndedAt:)` reused AS-IS (a break spanning
+    /// midnight logs to its end day).
     ///
-    /// - Returns: nil for a caller contract violation — no active break (the
-    ///   controls only exist on the break view) — or the typed
+    /// Exit routing (issue #34, AMENDING #23's pinned `.tasksView` tail):
+    /// the phase swaps to `.sessionStart` in EVERY outcome — the expiry
+    /// acknowledgment, the early end, and the non-blocking log-failure
+    /// path alike — so the loop lands directly on the session-start sheet
+    /// with the last session's target pre-selected. The break UX still
+    /// never traps: the append failure keeps its small warning
+    /// (`pendingBreakLogWarning`) and the flow continues.
+    ///
+    /// - Returns: nil for a caller contract violation — no active break
+    ///   (the controls only exist on the break view) — or the typed
     ///   `BreakLogOutcome` (`Equatable` for exact-case assertions).
     @discardableResult
     public func endBreak() async -> BreakLogOutcome? {
@@ -2100,10 +2202,15 @@ public final class AppModel {
             // masked `.logFailed` is invented for a shape the store cannot
             // produce.
             pendingBreakLogWarning = String(describing: error)
-            appPhase = .tasksView
+            // Issue #34: the break UX must never trap — the flow still
+            // continues, now to the session-start sheet.
+            appPhase = .sessionStart
             return nil
         }
-        appPhase = .tasksView
+        // Issue #34: both the logged and the non-blocking-failure
+        // outcomes land on the session-start sheet (was: `.tasksView` —
+        // #23's pinned tail, amended).
+        appPhase = .sessionStart
         return outcome
     }
 

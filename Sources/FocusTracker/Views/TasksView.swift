@@ -17,7 +17,9 @@ struct TasksView: View {
     /// sheet (a create under a given parent, or the edit of a subtask).
     @State private var subtaskFormRequest: SubtaskFormRequest?
     /// The #19 session-start sheet presentation: nil = closed; non-nil
-    /// shows the sheet, optionally pre-selecting the row it was opened from.
+    /// shows the sheet, pre-selecting the row it was opened from — or,
+    /// with no row hand-off, the #34 last-session target (composed at
+    /// the sheet call below; eligibility is filtered by the sheet).
     @State private var sessionStartRequest: SessionStartRequest?
     /// The #17 delete path's error surface: the subtask confirmation dialog
     /// has no form to surface a store error inline, so a failed delete is
@@ -76,7 +78,12 @@ struct TasksView: View {
             SessionStartView(
                 tasks: model.tasks,
                 knownCategoryNames: TaskFormState.knownCategoryNames(in: model.tasks),
-                preselectedTargetID: request.preselectedTargetID,
+                    // Issue #34: the manual entry point pre-selects
+                    // the last session's target when the request carries
+                    // no row hand-off (the sheet filters eligibility
+                    // either way).
+                    preselectedTargetID: request.preselectedTargetID
+                        ?? model.lastSessionTargetID,
                 onStart: { taskID, duration in
                     try await model.startSession(taskID: taskID, duration: duration)
                 },
@@ -205,9 +212,12 @@ struct TasksView: View {
             }
             ToolbarItem {
                 Button {
-                    // The #19 toolbar entry point: no preselection — the
-                    // picker starts empty. (No keyboard shortcut: the sheet
-                    // is modal enough and ⌘S would keep firing behind it.)
+                    // The #19 toolbar entry point: no row hand-off —
+                    // the sheet's pre-selection composes the #34
+                    // last-session target in the sheet call below (the
+                    // previous session's task when still eligible).
+                    // (No keyboard shortcut: the sheet is modal enough
+                    // and ⌘S would keep firing behind it.)
                     sessionStartRequest = SessionStartRequest(preselectedTargetID: nil)
                 } label: {
                     Label("Start Session", systemImage: "play")

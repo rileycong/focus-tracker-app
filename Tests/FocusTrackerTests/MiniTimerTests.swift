@@ -425,7 +425,7 @@ final class AppModelMiniTimerTests: XCTestCase {
 
     /// Resolves the #22 `.endingSession` phase left open by `endSession()`
     /// (a No answer, no notes) and the #23 post-session choice (Start Next
-    /// Session — the pinned no-auto-open return to Tasks) so a next session
+    /// Session — now the #34 direct `.sessionStart` phase) so a next session
     /// can start (§12.5, issue #23 criterion 4).
     private func submitEndingForm(on model: AppModel) async throws {
         var form = EndOfSessionFormState()
@@ -436,7 +436,7 @@ final class AppModelMiniTimerTests: XCTestCase {
         XCTAssertEqual(outcome, .success)
         XCTAssertEqual(model.appPhase, .postSessionChoice(completionFailure: nil))
         model.chooseStartNextSession()
-        XCTAssertEqual(model.appPhase, .tasksView)
+        XCTAssertEqual(model.appPhase, .sessionStart)
     }
 
     // MARK: - Collapse while running (issue #21 criterion 3)

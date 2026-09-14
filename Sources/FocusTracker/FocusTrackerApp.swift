@@ -53,8 +53,11 @@ struct FocusTrackerApp: App {
             // end-of-session modal over it — the required submission stops
             // at `.postSessionChoice` (issue #23: Start Next Session /
             // Take Break, NOTHING auto-starting), a running break shows the
-            // `.breakActive` countdown screen, and the choice's controls (or
-            // the break's end) return to Tasks.
+            // `.breakActive` countdown screen, and — the #34 amendment of
+            // #23's pinned exit — the choice's Start Next Session and the
+            // break's end open the session-start sheet DIRECTLY (the
+            // `.sessionStart` phase; only the sheet's Cancel returns to
+            // Tasks).
             // The `.task` bootstrap runs once — the scene's single window
             // (issue #27 amendment) is the only bootstrap site; the phase
             // swap replaces the content, not the window identity.
@@ -118,6 +121,39 @@ struct FocusTrackerApp: App {
                     // ONE phase-driven path; the view derives everything
                     // from the model's break passthroughs.
                     BreakView(model: model)
+                case .sessionStart:
+                    // The direct-to-session-start routing (issue #34,
+                    // amending #23's pinned exit): the post-session
+                    // choice's Start Next Session and every break end
+                    // swap here. Same presentation shape as the #22
+                    // modal: the sheet presents over the still-rendered
+                    // previous screen — here the task list, matching
+                    // where Start Next Session used to land. The sheet's
+                    // pre-selection is the model's #34 last-session
+                    // target (eligibility-filtered by the view), Cancel
+                    // routes through `cancelSessionStart()` (no
+                    // dismissal environment to fall back on), and Start
+                    // runs the ordinary #19 flow (the phase swaps to
+                    // `.timerView`).
+                    TasksView(model: model)
+                        .sheet(isPresented: .constant(true)) {
+                            SessionStartView(
+                                tasks: model.tasks,
+                                knownCategoryNames: TaskFormState
+                                    .knownCategoryNames(in: model.tasks),
+                                preselectedTargetID: model.lastSessionTargetID,
+                                onStart: { taskID, duration in
+                                    try await model.startSession(
+                                        taskID: taskID, duration: duration)
+                                },
+                                onStartAdHoc: { title, categoryNames, duration in
+                                    try await model.startAdHocSession(
+                                        title: title,
+                                        categoryNames: categoryNames,
+                                        duration: duration)
+                                },
+                                onCancel: { model.cancelSessionStart() })
+                        }
                 }
             }
             // The break-log warning (issue #23 criterion 18): the small

@@ -170,6 +170,25 @@ public enum SessionStartPicker {
             || target.parentTaskTitle.localizedCaseInsensitiveContains(trimmed)
     }
 
+    // MARK: - Pre-selection (issue #34)
+
+    /// The effective picker pre-selection (issue #34): `requestedID` when
+    /// it is planning-eligible in the given inventory, else nil. The
+    /// session-start sheet applies it on appear, so a Done, Blocked or
+    /// Dropped previous task — or an ID no longer in the inventory —
+    /// simply leaves the picker unselected (the current #19 behavior).
+    /// Pure so the eligibility rule is unit-testable like the grouping
+    /// (#19) and its callers (the sheet and the tests) cannot drift.
+    public static func preselectedTargetID(
+        requesting requestedID: UUID?, in tasks: [TaskItem]
+    ) -> UUID? {
+        guard let requestedID,
+            eligibleTargets(in: tasks).contains(where: { $0.id == requestedID })
+        else { return nil }
+        return requestedID
+    }
+
+
     // MARK: - Internals
 
     /// Depth-first walk of one sibling list; `path` is the title chain from

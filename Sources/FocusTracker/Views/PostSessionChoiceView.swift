@@ -24,6 +24,9 @@ import SwiftUI
 struct PostSessionChoiceView: View {
     /// The composition root — `chooseStartNextSession()` and
     /// `takeBreak(duration:)` are the pinned paths.
+    /// Issue #34 amends #23's pinned exit: Start Next Session now opens
+    /// the session-start sheet directly (the `.sessionStart` phase)
+    /// instead of returning to Tasks.
     let model: AppModel
     /// The §6.5 completion failure carried from the
     /// `.completionFailedAfterLog` submission; nil on the `.success` path.
