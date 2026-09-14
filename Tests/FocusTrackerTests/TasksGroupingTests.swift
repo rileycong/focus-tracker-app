@@ -489,4 +489,169 @@ final class TasksGroupingTests: XCTestCase {
             TasksGrouping.taskCollapseKey(taskA),
             TasksGrouping.subtaskCollapseKey(taskID: taskA, subtaskID: taskA))
     }
+
+    // MARK: - Parent completion & collapse resilience (issue #32)
+
+    /// A task with an explicit subtask tree — the real-tree shape the #32
+    /// user report ran against (a parent whose subtasks complete over time).
+    private func parentTree(
+        _ id: UUID, title: String, status: TaskStatus = .toDo,
+        subtasks: [SubtaskItem]
+    ) -> TaskItem {
+        try! TaskItem(
+            id: id, title: title, categories: [Category(name: "C")],
+            status: status, subtasks: subtasks)
+    }
+
+    @MainActor
+    func testParentCompletionKeepsStructureWellFormedAndFilterRevealsDoneTree() {
+        let parentID = UUID()
+        let draftID = UUID()
+        let reviewID = UUID()
+        let before = [
+            parentTree(parentID, title: "Ship report", subtasks: [
+                SubtaskItem(id: draftID, title: "Draft", status: .done),
+                SubtaskItem(id: reviewID, title: "Review"),
+            ])
+        ]
+        // The #32 completion: the last subtask bubbles → the whole tree Done.
+        let after = [
+            parentTree(parentID, title: "Ship report", status: .done, subtasks: [
+                SubtaskItem(id: draftID, title: "Draft", status: .done),
+                SubtaskItem(id: reviewID, title: "Review", status: .done),
+            ])
+        ]
+        let viewModel = TasksViewModel(
+            tasks: before, collapseStore: UserDefaultsCollapseStateStore(
+                defaults: UserDefaults(suiteName: suiteName)!))
+
+        // Pre-completion sanity: structure renders, a toggle works.
+        XCTAssertEqual(viewModel.sections.count, 1)
+        let toDoKey = TasksGrouping.statusCollapseKey(project: nil, status: .toDo)
+        viewModel.setExpanded(false, forKey: toDoKey)
+        XCTAssertFalse(viewModel.isExpanded(forKey: toDoKey))
+
+        viewModel.updateTasks(after)
+
+        // Filter off: the §8.3 pinned result is NO sections (all Done) —
+        // well-formed, not corrupted.
+        XCTAssertTrue(
+            viewModel.sections.isEmpty,
+            "all-Done inventory with the filter off is the pinned empty state")
+
+        // Filter on: the section structure is well-formed and the Done tree
+        // is fully there.
+        viewModel.showCompleted = true
+        XCTAssertEqual(viewModel.sections.count, 1)
+        XCTAssertEqual(
+            viewModel.sections[0].groups.map(\.status),
+            [.toDo, .inProgress, .blocked, .done, .dropped],
+            "pinned group order holds after the completion")
+        let doneGroup = viewModel.sections[0].groups[3]
+        XCTAssertEqual(doneGroup.tasks.count, 1)
+        XCTAssertEqual(doneGroup.tasks[0].id, parentID)
+        XCTAssertEqual(
+            doneGroup.tasks[0].subtasks.map(\.id), [draftID, reviewID],
+            "the completed tree renders intact under its parent")
+
+        // Collapse toggles keep working on the post-completion structure.
+        let doneKey = TasksGrouping.statusCollapseKey(project: nil, status: .done)
+        viewModel.setExpanded(false, forKey: doneKey)
+        XCTAssertFalse(viewModel.isExpanded(forKey: doneKey))
+        viewModel.toggleExpanded(forKey: doneKey)
+        XCTAssertTrue(viewModel.isExpanded(forKey: doneKey))
+    }
+
+    @MainActor
+    func testDoneGroupAutoExpandsWhenTaskMovesIntoDoneWithFilterOn() {
+        let work = Project(name: "Work")
+        let id = UUID()
+        let store = UserDefaultsCollapseStateStore(
+            defaults: UserDefaults(suiteName: suiteName)!)
+        let viewModel = TasksViewModel(
+            tasks: [task(id, title: "Report", project: work)],
+            showCompleted: true, collapseStore: store)
+        let sectionKey = TasksGrouping.projectCollapseKey(work)
+        let doneKey = TasksGrouping.statusCollapseKey(project: work, status: .done)
+        viewModel.setExpanded(false, forKey: doneKey)
+        XCTAssertFalse(viewModel.isExpanded(forKey: doneKey), "user collapsed Done earlier")
+
+        // The end-of-session completion mirrors into the view model.
+        viewModel.updateTasks([task(id, title: "Report", project: work, status: .done)])
+
+        XCTAssertTrue(
+            viewModel.isExpanded(forKey: doneKey),
+            "the receiving Done group auto-expands so the tree is discoverable")
+        XCTAssertTrue(
+            viewModel.isExpanded(forKey: sectionKey),
+            "the receiving section auto-expands too")
+        // And the write-through persisted (the relaunch path would agree):
+        XCTAssertTrue(store.isExpanded(forKey: doneKey))
+        XCTAssertTrue(store.isExpanded(forKey: sectionKey))
+    }
+
+    @MainActor
+    func testAutoExpandFiresOnlyOnDoneTransitionsNotOnFirstLoadOrChurn() {
+        let doneID = UUID()
+        let newID = UUID()
+        let store = UserDefaultsCollapseStateStore(
+            defaults: UserDefaults(suiteName: suiteName)!)
+        // First load with an already-Done task: the §8.3 default (expanded)
+        // applies, but no auto-expand force is involved; persist a collapse.
+        let viewModel = TasksViewModel(
+            tasks: [task(doneID, status: .done)],
+            showCompleted: true, collapseStore: store)
+        let doneKey = TasksGrouping.statusCollapseKey(project: nil, status: .done)
+        viewModel.setExpanded(false, forKey: doneKey)
+
+        // Unrelated inventory churn (a new To Do task appears) must not
+        // re-open the collapsed Done group:
+        viewModel.updateTasks([task(doneID, status: .done), task(newID, title: "New")])
+        XCTAssertFalse(viewModel.isExpanded(forKey: doneKey))
+
+        // A Done → Dropped move is not a reveal either:
+        viewModel.updateTasks([task(doneID, status: .dropped), task(newID, title: "New")])
+        XCTAssertFalse(viewModel.isExpanded(forKey: doneKey))
+    }
+
+    @MainActor
+    func testCollapseStateSurvivesChangingTaskSetsAndNeverSticks() {
+        let work = Project(name: "Work")
+        let home = Project(name: "Home")
+        let a = UUID()
+        let b = UUID()
+        let c = UUID()
+        let store = UserDefaultsCollapseStateStore(
+            defaults: UserDefaults(suiteName: suiteName)!)
+        let viewModel = TasksViewModel(
+            tasks: [task(a, project: work)], collapseStore: store)
+        let workKey = TasksGrouping.projectCollapseKey(work)
+        viewModel.setExpanded(false, forKey: workKey)
+
+        // The Work task disappears from the inventory (deletion, vault
+        // switch, …); a Home task appears. Toggling the surviving structure
+        // keeps working — no stuck sections.
+        viewModel.updateTasks([task(b, project: home)])
+        let homeKey = TasksGrouping.projectCollapseKey(home)
+        viewModel.setExpanded(false, forKey: homeKey)
+        XCTAssertFalse(viewModel.isExpanded(forKey: homeKey))
+        viewModel.setExpanded(true, forKey: homeKey)
+        XCTAssertTrue(viewModel.isExpanded(forKey: homeKey))
+
+        // Work returns (task re-created): its persisted collapsed state
+        // comes back with it — stale keys never wedge the structure.
+        viewModel.updateTasks([task(b, project: home), task(c, project: work)])
+        XCTAssertFalse(viewModel.isExpanded(forKey: workKey))
+
+        // The relaunch path: a fresh view model over the same suite agrees.
+        let relaunched = TasksViewModel(
+            tasks: [task(b, project: home), task(c, project: work)],
+            collapseStore: store)
+        XCTAssertFalse(relaunched.isExpanded(forKey: workKey))
+        XCTAssertTrue(relaunched.isExpanded(forKey: homeKey))
+        // Untouched keys still default to expanded:
+        XCTAssertTrue(
+            relaunched.isExpanded(
+                forKey: TasksGrouping.statusCollapseKey(project: work, status: .toDo)))
+    }
 }

@@ -611,4 +611,105 @@ final class AppModelEndOfSessionTests: XCTestCase {
                 calendar: calendar),
             "2026-09-04.md")
     }
+
+    // MARK: - Completion discoverability (issue #32)
+
+    func testSubmitYesWithActiveSiblingsLeavesParentActiveAndSurfacesNoNotice()
+        async throws
+    {
+        // The #32 report shape: a session on ONE subtask of a tree whose
+        // other subtasks are not Done. The parent must stay active on disk,
+        // the sibling untouched, and — since nothing left the visible
+        // groups — no notice may surface.
+        let parentID = UUID()
+        let firstID = UUID()
+        let siblingID = UUID()
+        try writeTaskFile(
+            "Siblings parent", id: parentID, status: .toDo,
+            subtasks: [
+                SubtaskItem(id: firstID, title: "First"),
+                SubtaskItem(id: siblingID, title: "Sibling"),
+            ], in: vaultURL)
+        let model = await makeConfiguredModel()
+        _ = try await startRunningSession(on: model, taskID: firstID)
+        try runPinnedTelemetry(on: model)
+        _ = try model.endSession()
+
+        let outcome = try await model.submitEndOfSession(
+            makeForm(completed: .yes, focus: 4, energy: 2))
+
+        XCTAssertEqual(outcome, .success)
+        let onDisk = try await parseBackTask(id: parentID)
+        XCTAssertEqual(onDisk.status, .toDo, "an active sibling holds the parent open")
+        XCTAssertEqual(try XCTUnwrap(onDisk.subtasks.first { $0.id == firstID }).status, .done)
+        XCTAssertEqual(
+            try XCTUnwrap(onDisk.subtasks.first { $0.id == siblingID }).status, .toDo,
+            "the sibling must not disappear into Done")
+        XCTAssertNil(model.completionNotice, "nothing left the active groups")
+        let mirrored = try XCTUnwrap(model.tasks.first { $0.id == parentID })
+        XCTAssertEqual(mirrored.status, .toDo, "the mirrored inventory agrees with disk")
+    }
+
+    func testSubmitYesOnLastSubtaskCompletesParentAndSurfacesNoticeThenDismisses()
+        async throws
+    {
+        // The legitimate §8.3 case: the last subtask completes → the parent
+        // tree moves into the hidden Done group. The submission must surface
+        // WHICH task moved, and the dismiss must clear it.
+        let parentID = UUID()
+        let onlyID = UUID()
+        try writeTaskFile(
+            "Last subtask parent", id: parentID,
+            subtasks: [SubtaskItem(id: onlyID, title: "Only")], in: vaultURL)
+        let model = await makeConfiguredModel()
+        _ = try await startRunningSession(on: model, taskID: onlyID)
+        try runPinnedTelemetry(on: model)
+        _ = try model.endSession()
+
+        let outcome = try await model.submitEndOfSession(makeForm(completed: .yes))
+
+        XCTAssertEqual(outcome, .success)
+        let onDisk = try await parseBackTask(id: parentID)
+        XCTAssertEqual(onDisk.status, .done, "last-subtask completion bubbles to the parent")
+        let notice = try XCTUnwrap(model.completionNotice, "the moved tree must be surfaced")
+        XCTAssertEqual(notice.taskTitle, "Last subtask parent")
+        XCTAssertEqual(model.tasks.first { $0.id == parentID }?.status, .done)
+        model.dismissCompletionNotice()
+        XCTAssertNil(model.completionNotice, "dismissal clears the notice")
+    }
+
+    func testSubmitYesBubblingToMidLevelAncestorOnlySurfacesNoNotice() async throws {
+        // Completing the last leaf bubbles to the mid-level ancestor but NOT
+        // to the top-level parent (a second, still-active subtask holds it
+        // open): the tree stays visible (the parent keeps rendering), so no
+        // disappearance and no notice.
+        let parentID = UUID()
+        let midID = UUID()
+        let doneLeafID = UUID()
+        let activeLeafID = UUID()
+        let otherID = UUID()
+        try writeTaskFile(
+            "Mid chain parent", id: parentID,
+            subtasks: [
+                SubtaskItem(
+                    id: midID, title: "Mid",
+                    children: [
+                        SubtaskItem(id: doneLeafID, title: "Done leaf", status: .done),
+                        SubtaskItem(id: activeLeafID, title: "Active leaf"),
+                    ]),
+                SubtaskItem(id: otherID, title: "Other"),
+            ], in: vaultURL)
+        let model = await makeConfiguredModel()
+        _ = try await startRunningSession(on: model, taskID: activeLeafID)
+        try runPinnedTelemetry(on: model)
+        _ = try model.endSession()
+
+        let outcome = try await model.submitEndOfSession(makeForm(completed: .yes))
+
+        XCTAssertEqual(outcome, .success)
+        let onDisk = try await parseBackTask(id: parentID)
+        XCTAssertEqual(onDisk.status, .toDo, "the top-level parent stays active")
+        XCTAssertEqual(try XCTUnwrap(onDisk.subtasks.first).status, .done)
+        XCTAssertNil(model.completionNotice)
+    }
 }

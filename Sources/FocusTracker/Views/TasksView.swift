@@ -155,6 +155,13 @@ struct TasksView: View {
 
     private var loadedView: some View {
         Group {
+            // The transient completion notice (issue #32): a §6.5 "Yes" can
+            // move a task's whole tree into the Done group, which §8.3
+            // hides with the filter off — the banner names what moved and
+            // where it went, so the disappearance is never inexplicable.
+            if let notice = model.completionNotice {
+                completionNoticeBanner(notice)
+            }
             if model.tasks.isEmpty {
                 ContentUnavailableView(
                     "No tasks yet",
@@ -226,16 +233,63 @@ struct TasksView: View {
         }
     }
 
+    /// The transient completion notice (issue #32): names the task whose
+    /// whole tree just moved into the Done group. Auto-expires after a few
+    /// seconds (the `.task` timer below — cancelled when the view leaves);
+    /// the ✕ button (and the next notice) dismiss it immediately through
+    /// `AppModel.dismissCompletionNotice()`.
+    private func completionNoticeBanner(_ notice: AppModel.CompletionNotice) -> some View {
+        HStack(spacing: DesignTokens.spacingS) {
+            Image(systemName: "checkmark.circle.fill")
+                .foregroundStyle(DesignTokens.statusColor(.done))
+            VStack(alignment: .leading, spacing: DesignTokens.spacingXS) {
+                Text("Task “\(notice.taskTitle)” moved to Done")
+                    .font(DesignTokens.bodyFont)
+                Text("It now lives in the Done group — toggle “Show completed/dropped” to see it.")
+                    .font(DesignTokens.annotationFont)
+                    .foregroundStyle(.secondary)
+            }
+            Spacer(minLength: DesignTokens.spacingS)
+            Button {
+                model.dismissCompletionNotice()
+            } label: {
+                Image(systemName: "xmark")
+                    .font(DesignTokens.annotationFont)
+                    .foregroundStyle(.secondary)
+            }
+            .buttonStyle(.plain)
+            .help("Dismiss")
+        }
+        .padding(DesignTokens.spacingM)
+        .background(DesignTokens.chipBackground)
+        .clipShape(RoundedRectangle(cornerRadius: DesignTokens.panelCornerRadius))
+        .task(id: notice) {
+            do {
+                try await Task.sleep(for: .seconds(10))
+            } catch {
+                return
+            }
+            model.dismissCompletionNotice()
+        }
+    }
+
     private var taskList: some View {
         ScrollView {
             LazyVStack(alignment: .leading, spacing: 0) {
                 if viewModel.sections.isEmpty {
-                    ContentUnavailableView(
-                        "Nothing to show",
-                        systemImage: "eye.slash",
-                        description: Text(
+                    ContentUnavailableView {
+                        Label("Nothing to show", systemImage: "eye.slash")
+                    } description: {
+                        Text(
                             "Every task is Done or Dropped. "
-                                + "Enable “Show completed/dropped” to see them."))
+                                + "Enable “Show completed/dropped” to see them.")
+                    } actions: {
+                        // Issue #32: one tap resolves the all-done empty
+                        // state — the tree the filter is hiding comes back.
+                        Button("Show completed/dropped") {
+                            viewModel.showCompleted = true
+                        }
+                    }
                 } else {
                     ForEach(viewModel.sections) { section in
                         sectionView(section)

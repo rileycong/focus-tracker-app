@@ -457,6 +457,46 @@ final class VaultStoreTransitionTests: XCTestCase {
             try await store.startSession(task.id)
         }
     }
+
+    // MARK: - Issue #32 regression pins (the reported flow, real fixture tree)
+
+    /// The #32 report, pinned against the real fixture tree: completing ONE
+    /// subtask while a sibling is not Done must NOT complete the parent (the
+    /// whole tree must not vanish), and completing the LAST subtask must
+    /// complete the parent in the same single-file change set.
+    func testSubtaskCompletionSiblingsHoldParentThenLastOneCompletesIt()
+        async throws
+    {
+        let store = makeStore()
+        _ = try requireLoaded(await store.load())
+
+        // Step 1 — "Map key results" has a Blocked sibling ("Define Q4
+        // objectives"): only the target completes; "Draft OKRs" and the
+        // "Plan Q4 roadmap" task stay active.
+        let firstOutcome = try await store.complete(Self.mapKeyResultsID)
+        XCTAssertEqual(firstOutcome, .transitioned([Self.mapKeyResultsID]))
+        let heldOpen = try await unwrapOwningTask(Self.mapKeyResultsID, from: store)
+        XCTAssertEqual(heldOpen.status, .inProgress, "parent NOT completed")
+        XCTAssertEqual(
+            heldOpen.subtaskTree(Self.draftOKRID)?.status, .inProgress,
+            "the target's parent subtask NOT completed")
+        try await assertParseBackEqual(
+            heldOpen.applying(status: .done, to: [Self.mapKeyResultsID]),
+            fileName: "Plan Q4 roadmap.md", store: store)
+
+        // Step 2 — the last subtask of "Draft OKRs" ("Define Q4 objectives",
+        // unblocked first): completing it bubbles to "Draft OKRs" AND the
+        // top-level task in ONE derived change set.
+        _ = try await store.unblock(Self.defineObjectivesID)
+        let lastOutcome = try await store.complete(Self.defineObjectivesID)
+        XCTAssertEqual(
+            lastOutcome,
+            .transitioned([Self.defineObjectivesID, Self.draftOKRID, Self.planQ4ID]))
+        let completed = try await unwrapOwningTask(Self.planQ4ID, from: store)
+        XCTAssertEqual(completed.status, .done)
+        try await assertParseBackEqual(
+            completed, fileName: "Plan Q4 roadmap.md", store: store)
+    }
 }
 
 // MARK: - Small test-side tree accessors

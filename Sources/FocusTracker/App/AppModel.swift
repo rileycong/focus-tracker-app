@@ -113,6 +113,15 @@ import Observation
 /// time lands in paused, never focused) — with the pinned ordering
 /// restore → state updates → phase swap so no guard-gap exists.
 ///
+/// Issue #32 adds the completion discoverability surface: when the §6.5
+/// completion's change set contains the owning top-level task, its WHOLE
+/// tree just left the active groups (PRD §8.3 hides Done/Dropped by
+/// default, so the completed tree visibly disappears from the list). The
+/// submission then sets `completionNotice` — a transient, dismissible
+/// banner the Tasks view renders ("Task "X" moved to Done") — so the move
+/// is never inexplicable. A subtask completion that does NOT complete its
+/// top-level owner changes nothing discoverable and sets no notice.
+///
 /// # Break flow (issue #23, PRD §14)
 /// The opt-in break behind the post-submission choice: `takeBreak(duration:)`
 /// starts a `BreakTimerEngine` (default 5 minutes, configured at the choice
@@ -419,6 +428,18 @@ public final class AppModel {
         case adHocCreationFailed(VaultStoreError)
     }
 
+    /// The transient completion notice (issue #32): what the Tasks view
+    /// surfaces when a §6.5 completion moved a top-level task's whole tree
+    /// into the Done group. `Equatable` for exact assertions.
+    public struct CompletionNotice: Equatable, Sendable {
+        /// The moved task's title — the name the banner shows.
+        public let taskTitle: String
+
+        public init(taskTitle: String) {
+            self.taskTitle = taskTitle
+        }
+    }
+
     // MARK: - Owned layers
 
     /// The task store for the configured vault; nil until a vault path is
@@ -493,6 +514,13 @@ public final class AppModel {
     /// omitted in both views. Reset on every new engine session (a fresh
     /// fetch, never a stale number) and on `endSession()`.
     public private(set) var sessionNumberToday: Int?
+    /// The transient completion notice (issue #32): set by
+    /// `submitEndOfSession` exactly when the §6.5 completion's change set
+    /// contains the owning top-level task — i.e. its whole tree just moved
+    /// into Done and, with the §8.3 filter off, left the visible list. The
+    /// Tasks view renders it as a dismissible banner (auto-expiring there);
+    /// `dismissCompletionNotice()` clears it. nil = nothing to surface.
+    public private(set) var completionNotice: CompletionNotice?
 
     // MARK: - Init
 
@@ -1452,8 +1480,9 @@ public final class AppModel {
         // (e.g. an already-Done target) writes nothing and is still a
         // successful submission.
         if form.completedChoice == .yes {
+            let outcome: StatusTransition.Outcome
             do {
-                try await store.complete(result.taskID)
+                outcome = try await store.complete(result.taskID)
             } catch let error as VaultStoreError {
                 // The documented partial outcome: logged, not completed.
                 // Issue #23 routes the flow's exit to the post-session
@@ -1462,6 +1491,19 @@ public final class AppModel {
                 return .completionFailedAfterLog(error)
             }
             await mirrorSyncedInventory(from: store)
+            // Issue #32: when the change set contains the owning top-level
+            // task, its whole tree just moved into Done and — with the §8.3
+            // filter off — out of the visible list. Surface the move as a
+            // transient notice so it is never inexplicable. A subtask
+            // completion that leaves its top-level owner active changes
+            // nothing discoverable and sets no notice; a no-op decision
+            // (`.transitioned([])`, e.g. an already-Done target) moved
+            // nothing either.
+            if case .transitioned(let changed) = outcome, !changed.isEmpty,
+                let owner = tasks.first(where: { changed.contains($0.id) })
+            {
+                completionNotice = CompletionNotice(taskTitle: owner.title)
+            }
         }
 
         // Step 4: the ending state is cleared — including the #29 retained
@@ -1470,6 +1512,13 @@ public final class AppModel {
         // / Take Break — nothing auto-starts).
         appPhase = .postSessionChoice(completionFailure: nil)
         return .success
+    }
+
+    /// Dismisses the transient completion notice (issue #32) — the banner's
+    /// manual dismiss action; the Tasks view's auto-expiry calls this too.
+    /// A typed no-op when no notice is showing.
+    public func dismissCompletionNotice() {
+        completionNotice = nil
     }
 
     /// The day file a session logs into (issue #22 criterion 10, PRD §13):
