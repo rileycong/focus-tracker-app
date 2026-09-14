@@ -50,9 +50,10 @@ import SwiftUI
 /// `TimerDisplayTests`).
 ///
 /// # Expiry (pinned #12 semantics, issue #20 criterion 7)
-/// When remaining hits 0 the ring completes (full "done" color — the subtle
-/// completion state): the arc geometry swaps to the full circle (0→1) via the
-/// pure `TimerDisplay.ringArc` (regression-tested — `trim(from: 1, to: 1)`
+/// When remaining hits 0 the ring completes (the full `focusRingCompleted`
+/// circle — the subtle completion state, #35's lighter red-family tint):
+/// the arc geometry swaps to the full circle (0→1) via the pure
+/// `TimerDisplay.ringArc` (regression-tested — `trim(from: 1, to: 1)`
 /// would render an empty arc and the ring would vanish). The countdown reads
 /// "0:00", and the session **stays
 /// active until the user ends it** — no auto-end, no auto-modal; the End
@@ -60,6 +61,18 @@ import SwiftUI
 /// ETA line is omitted** — the estimated finish time has passed, and showing
 /// a stale or perpetually-moving "now" would be noise; omission keeps the
 /// screen calm (PRD §21).
+///
+/// # Ring color RED (issue #35, PRD §21)
+/// The user asked for the focus ring in red: the ring strokes
+/// `DesignTokens.focusRing` (a calm dark-theme red, documented on the
+/// token) while running and `DesignTokens.focusRingCompleted` — a lighter
+/// tint of the same red family — at expiry/completion. Legibility in the
+/// enforced dark theme is pinned by the token-level `DesignTokensTests`
+/// (full-arc and paused-dim contrast, completed lighter than running).
+/// Deliberately unchanged: the BREAK ring keeps its blue
+/// `statusColor(.inProgress)` + green `.done` completion (`BreakView` —
+/// issue #35 changes only the focus rings), and the mini panel shows no
+/// ring at all (pinned §11 content — see `MiniTimerView`).
 ///
 /// The `SessionTimerPlaceholderView` this replaces was **deleted** (its
 /// rationale was absorbed into the sections above); the real file is the
@@ -231,15 +244,15 @@ struct TimerView: View {
                 // Remaining arc: from the clamped progress offset to 1 — the
                 // ring shrinks as time passes (issue #20 criterion 2). At
                 // expiry the geometry swaps to the FULL circle (0→1) so the
-                // ring completes into the subtle "done" color; the range is
+                // ring completes into the #35 completion red; the range is
                 // the pure, regression-tested `TimerDisplay.ringArc` (a naive
                 // trim(from: 1, to: 1) would render an empty, vanished arc).
                 Circle()
                     .trim(from: state.ringArc.from, to: state.ringArc.to)
                     .stroke(
                         state.isExpired
-                            ? DesignTokens.statusColor(.done)
-                            : DesignTokens.statusColor(.inProgress),
+                            ? DesignTokens.focusRingCompleted
+                            : DesignTokens.focusRing,
                         style: StrokeStyle(
                             lineWidth: DesignTokens.ringLineWidth, lineCap: .round))
                     .rotationEffect(.degrees(-90))

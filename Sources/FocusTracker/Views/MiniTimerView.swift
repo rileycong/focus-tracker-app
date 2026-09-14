@@ -67,6 +67,15 @@ import SwiftUI
 /// pinned shake is actually visible. The mini panel itself deliberately
 /// never shakes (engineer's choice, documented) — beeps plus the restored
 /// shaking full window are the alarm's surface here.
+///
+/// # Ring color RED (issue #35): n/a by pinned design — documented
+/// The mini deliberately shows **no ring** (pinned PRD §11 content: title,
+/// countdown, session number, Pause/Resume, End/Stop — re-affirmed through
+/// #28's adaptive countdown sizing, which a surrounding ring could not fit
+/// without shrinking the countdown). Issue #35's red ring therefore lives
+/// on the full timer only (`TimerView`); `DesignTokens.focusRing` is the
+/// ONE ring color token, so any future mini-mode ring must reuse it — the
+/// two countdowns then match by construction.
 struct MiniTimerView: View {
     /// The running session's display context (resolved at start, issue #19;
     /// passed through the panel controller).

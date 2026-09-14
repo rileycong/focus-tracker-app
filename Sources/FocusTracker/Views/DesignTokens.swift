@@ -91,6 +91,25 @@ enum DesignTokens {
     static let bannerBackground = Color(red: 0.28, green: 0.19, blue: 0.08)
     /// Degraded-state banner icon color.
     static let warning = Color(red: 1.0, green: 0.72, blue: 0.32)
+    /// The focus session's countdown ring (issue #35): a calm dark-theme
+    /// red — the user's requested focus-ring color, tuned for the enforced
+    /// dark theme (PRD §21): enough lightness that the 10pt ring reads
+    /// clearly on the `background` dark gray (~5.4:1; the previous blue
+    /// was ~5.9:1), muted enough to stay calm rather than alarm-red.
+    /// Deliberately its own token — NOT `overdue`/`priorityColor(.high)`
+    /// (those carry deadline/priority semantics; the ring carries "focus
+    /// session running"). Paused dimming checked against this tone: the
+    /// `pausedArcOpacity`-dimmed arc keeps ~2.3:1, parity with the blue it
+    /// replaces (~2.4:1) — dimmed but visible, as before.
+    static let focusRing = Color(red: 1.0, green: 0.45, blue: 0.42)
+    /// The expired/completed focus ring (issue #35): the full circle the
+    /// ring completes into at expiry — a lighter, settled tint of the SAME
+    /// red family, so the "done" highlight stays in the user's requested
+    /// red hue and stays the most legible state on the dark background.
+    /// The BREAK ring deliberately keeps the green `statusColor(.done)`
+    /// completion (issue #35 changes only the focus rings; the break ring
+    /// stays blue — see `BreakView`).
+    static let focusRingCompleted = Color(red: 1.0, green: 0.60, blue: 0.56)
 
     /// The subtle per-status indicator color (PRD §21: unobtrusive metadata —
     /// a small dot, never a loud badge).
