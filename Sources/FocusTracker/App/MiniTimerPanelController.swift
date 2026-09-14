@@ -150,11 +150,13 @@ enum MiniTimerPanelLayout {
 /// app had it. There is deliberately no `NSApp.activate(…)` and no
 /// `makeKey()` anywhere on the show path.
 ///
-/// # Lifecycle (issue #21 criterion 5, pinned)
+/// # Lifecycle (issue #21 criterion 5, pinned; re-delivery issue #31)
 /// The panel **only exists while a session is active**: `show(context:)`
 /// creates it lazily and `dismiss()` tears it down completely (`orderOut` +
 /// content release + nil). The driving logic lives in `FocusTrackerApp`'s
-/// sync (the observable `AppModel.isMiniTimerActive` / `appPhase`), so the
+/// sync (the observable `AppModel.isMiniTimerActive` / `appPhase`, with
+/// `miniTimerPresentationEpoch` re-delivering every accepted request — the
+/// #31 fix for lost-edge deadlocks), so the
 /// panel closes on a session end **by any path** (End from mini, End from
 /// full after restore, and #22's future flow — all funnel through
 /// `AppModel.endSession()`, which clears the mini flag). There is **no
@@ -186,6 +188,16 @@ final class MiniTimerPanelController {
     /// running session's context and shows it without stealing focus (the
     /// pinned show call above). The session itself is untouched — timing
     /// keeps running through the same coordinator.
+    ///
+    /// #31 self-healing contract: this method is IDEMPOTENT and
+    /// re-asserting. It is called on every sync delivery while collapsed —
+    /// including re-deliveries (issue #31's presentation epoch): a lost or
+    /// torn-down panel (the #31 stuck-state forensics: panel gone from the
+    /// window server while the flag stayed on) is recreated from scratch
+    /// here at the default frame, and a live one is re-ordered front
+    /// (redundant `makeKeyAndOrderFront` is a no-op re-assert). Redundant
+    /// deliveries therefore converge on "panel visible" instead of relying
+    /// on a single edge delivery to have stuck.
     ///
     /// #28: while the panel already exists (redundant sync deliveries while
     /// collapsed), the live contentView is kept, not rebuilt — the user's

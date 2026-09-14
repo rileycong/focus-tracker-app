@@ -35,6 +35,7 @@
 		4866585A7AACB6576688B9BF /* TaskOrderingTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 95709B12E9BA98C14EF8CEAB /* TaskOrderingTests.swift */; };
 		4A31461E0538DB93A092BA40 /* VaultStructureValidatorTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 64C87806167E963A7D11D916 /* VaultStructureValidatorTests.swift */; };
 		4A6D67334A0E9AC55CBF51E8 /* EndOfSessionFormState.swift in Sources */ = {isa = PBXBuildFile; fileRef = BD9179D2909498220C214EE0 /* EndOfSessionFormState.swift */; };
+		4C28161E12A283C0F7DF33E6 /* AppModelMiniTimerEpochTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5FEA6A7576E048D889E55C19 /* AppModelMiniTimerEpochTests.swift */; };
 		4CA8116552D030F08BFE1FC9 /* TimerDisplayTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = DD420083F379F54961F244ED /* TimerDisplayTests.swift */; };
 		4CE0485DD586E39C8634CEB9 /* MiniTimerView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 33016951FE75D4AE77E4F634 /* MiniTimerView.swift */; };
 		4DD7512AF2018D0642E67299 /* TaskFormState.swift in Sources */ = {isa = PBXBuildFile; fileRef = 445B3D8CCF237E3DFFE44208 /* TaskFormState.swift */; };
@@ -161,6 +162,7 @@
 		556B8ABC78BC23CE6B95A6C6 /* AppModelTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppModelTests.swift; sourceTree = "<group>"; };
 		5A91EAC12B02FAB3678FCD99 /* SessionStartPicker.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SessionStartPicker.swift; sourceTree = "<group>"; };
 		5F0BA521BD58A62A830A1C10 /* StatusTransition.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StatusTransition.swift; sourceTree = "<group>"; };
+		5FEA6A7576E048D889E55C19 /* AppModelMiniTimerEpochTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppModelMiniTimerEpochTests.swift; sourceTree = "<group>"; };
 		608FD7031D7A36234F5A9C7B /* TaskRowView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TaskRowView.swift; sourceTree = "<group>"; };
 		612FA419C07278972E2B1A86 /* AppModelBreakTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppModelBreakTests.swift; sourceTree = "<group>"; };
 		64C87806167E963A7D11D916 /* VaultStructureValidatorTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VaultStructureValidatorTests.swift; sourceTree = "<group>"; };
@@ -356,6 +358,7 @@
 				612FA419C07278972E2B1A86 /* AppModelBreakTests.swift */,
 				766849204C9C3E9011D58F46 /* AppModelCancelEndOfSessionTests.swift */,
 				B015AD3C715AB5F42EB44E61 /* AppModelEndOfSessionTests.swift */,
+				5FEA6A7576E048D889E55C19 /* AppModelMiniTimerEpochTests.swift */,
 				681606B16406FD9CC58C5181 /* AppModelReorderTests.swift */,
 				249524565EF81FA11176ADB8 /* AppModelSessionStartTests.swift */,
 				07D6524661D2133A7F8C1AAA /* AppModelSubtaskTests.swift */,
@@ -542,6 +545,7 @@
 				B20A197F586C2EFB53EC7263 /* AppModelBreakTests.swift in Sources */,
 				FCFAB1E251266D2C09013AB1 /* AppModelCancelEndOfSessionTests.swift in Sources */,
 				36AA785F718AEE079885A7CE /* AppModelEndOfSessionTests.swift in Sources */,
+				4C28161E12A283C0F7DF33E6 /* AppModelMiniTimerEpochTests.swift in Sources */,
 				2E5C41BE3B9D53099472C195 /* AppModelReorderTests.swift in Sources */,
 				B433D6B457362EA7A919B673 /* AppModelSessionStartTests.swift in Sources */,
 				6B7E9E6EDE238B93D4BBE113 /* AppModelSubtaskTests.swift in Sources */,

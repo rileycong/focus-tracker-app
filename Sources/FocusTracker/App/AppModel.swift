@@ -470,6 +470,21 @@ public final class AppModel {
     /// panel closes on a session end by any path). In-memory only — nothing
     /// is persisted (issue criterion 5: relaunch defaults to the full view).
     public private(set) var isMiniTimerActive = false
+    /// Mini-presentation epoch (issue #31): bumped on every ACCEPTED
+    /// collapse/restore request — including requests that do not change
+    /// `isMiniTimerActive` — and never otherwise. The app shell's sync keys
+    /// its `.onChange` on this counter instead of the flag, because a
+    /// flag-edge-driven sync is a deadlock: a delivery can be lost or a
+    /// panel torn down while the flag stays on, and the user's next Mini
+    /// click would then be a silent no-op (true→true fires nothing — the
+    /// reported "second attempt dead"). Bumping on every accepted request
+    /// makes every click a re-delivery of the level-driven sync
+    /// (`FocusTrackerApp.syncMiniPanel`), which re-asserts the actual
+    /// presentation (panel recreated/shown, window hidden) from current
+    /// state — self-healing, repeatable collapse/restore cycles. `endSession`
+    /// deliberately does not bump: its sync delivery rides the
+    /// `.endingSession` phase change.
+    public private(set) var miniTimerPresentationEpoch = 0
     /// The #20 session-number snapshot (issue #21 criterion 2), lifted into
     /// the model: `TimerView` fetches it once on appear via
     /// `DailyLogStore.sessions(for:on:)` and records it here; the mini view
@@ -1248,30 +1263,39 @@ public final class AppModel {
         sessionNumberToday = number
     }
 
-    /// Collapse-to-mini (issue #21 criterion 3, PRD §10.2): flips the
-    /// observable mini-mode flag on. The window swap itself (showing the
-    /// `MiniTimerPanelController` panel, `orderOut`-ing the main window —
-    /// the pinned choice over `miniaturize`) is driven from the observable
-    /// state by `FocusTrackerApp`'s sync, keeping `AppModel` AppKit-free.
-    /// Guards, documented: refuses when **no session is active** (the panel
-    /// only exists while a session is active, issue criterion 5) or the
-    /// phase is not `.timerView` — a silent no-op either way, since the
-    /// control that triggers this only exists on the active-session timer
-    /// view. The session itself is untouched: same coordinator, same engine,
-    /// same `.timerView(context)` phase.
+    /// Collapse-to-mini (issue #21 criterion 3, PRD §10.2; self-healing
+    /// re-delivery issue #31): flips the observable mini-mode flag on and
+    /// bumps `miniTimerPresentationEpoch` so the app shell's sync runs even
+    /// when the flag is ALREADY on (a repeated Mini click re-asserts the
+    /// panel instead of being a silent no-op — see the epoch documentation).
+    /// The window swap itself (showing the `MiniTimerPanelController` panel,
+    /// `orderOut`-ing the main window — the pinned choice over
+    /// `miniaturize`) is driven from the observable state by
+    /// `FocusTrackerApp`'s sync, keeping `AppModel` AppKit-free. Guards,
+    /// documented: refuses when **no session is active** (the panel only
+    /// exists while a session is active, issue criterion 5) or the phase is
+    /// not `.timerView` — a silent no-op either way, since the control that
+    /// triggers this only exists on the active-session timer view. The
+    /// session itself is untouched: same coordinator, same engine, same
+    /// `.timerView(context)` phase.
     public func collapseToMiniTimer() {
         guard isSessionActive else { return }
         guard case .timerView = appPhase else { return }
         isMiniTimerActive = true
+        miniTimerPresentationEpoch += 1
     }
 
-    /// Restore-from-mini (issue #21 criterion 3): flips the mini-mode flag
-    /// off; the phase stays `.timerView(context)` and the session lifecycle
-    /// is untouched — the full timer display is restored by the same
-    /// observable-driven sync. A typed no-op when not collapsed.
+    /// Restore-from-mini (issue #21 criterion 3; epoch bump issue #31):
+    /// flips the mini-mode flag off and bumps the presentation epoch (the
+    /// sync re-asserts the full window and tears the panel down). The phase
+    /// stays `.timerView(context)` and the session lifecycle is untouched —
+    /// the full timer display is restored by the same observable-driven
+    /// sync. A typed no-op (no epoch bump, no sync delivery) when not
+    /// collapsed — the restore controls exist only on the panel itself.
     public func restoreFromMiniTimer() {
         guard isMiniTimerActive else { return }
         isMiniTimerActive = false
+        miniTimerPresentationEpoch += 1
     }
 
     /// Pauses (coordinator passthrough) and tracks the observable state.

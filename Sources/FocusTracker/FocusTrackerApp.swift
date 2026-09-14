@@ -145,14 +145,38 @@ struct FocusTrackerApp: App {
             // (phase → `.endingSession`, flag already cleared by
             // `endSession()`).
             .onChange(of: model.appPhase) { _, _ in syncMiniPanel() }
-            .onChange(of: model.isMiniTimerActive) { _, _ in syncMiniPanel() }
+            // Issue #31: the sync delivery keys on the presentation EPOCH,
+            // not the flag. A flag-edge sync deadlocks: when a panel is lost
+            // (or a delivery missed) while `isMiniTimerActive` stays on, a
+            // repeated Mini click flips true→true, fires nothing, and mini
+            // mode is stranded (the reported "second attempt dead"). The
+            // epoch bumps on every accepted collapse/restore request, so
+            // every click re-delivers the level-driven sync below.
+            .onChange(of: model.miniTimerPresentationEpoch) { _, _ in syncMiniPanel() }
             .preferredColorScheme(.dark)
             .frame(minWidth: 640, minHeight: 420)
         }
     }
 
     /// The single place that drives the mini panel and the main window's
-    /// visibility from the observable model state (issue #21 criteria 3–5):
+    /// visibility from the observable model state (issue #21 criteria 3–5;
+    /// re-delivery/self-healing issue #31):
+    ///
+    /// # Root cause of the #31 "no mini panel appears; second attempt dead"
+    /// The pre-#31 sync was driven by `.onChange(of: isMiniTimerActive)` —
+    /// an EDGE. The user's stuck instance (forensically dumped live via the
+    /// macOS window server: main window visible again, NO panel window in
+    /// the server's window list, flag stranded on) is exactly the lost-edge
+    /// deadlock: once the panel presentation diverges from the flag — a
+    /// sync delivery lost in a restructure, or the panel dismissed while
+    /// the flag stays on — no future state edge can repair it, and the
+    /// user's next Mini click sets `true→true`, which fires nothing. The
+    /// fix is structural: the sync is LEVEL-driven (it re-derives the whole
+    /// presentation from current state every run) and every accepted
+    /// collapse/restore request bumps `miniTimerPresentationEpoch`, so
+    /// every click re-delivers a sync run — a dead/stale presentation is
+    /// re-asserted (panel recreated + ordered front, window re-hidden)
+    /// instead of stranding mini mode.
     ///
     /// - **Collapse** (`.timerView` + `isMiniTimerActive`): show the mini
     ///   panel without stealing focus, then `orderOut` the main window (the
@@ -160,7 +184,11 @@ struct FocusTrackerApp: App {
     ///   `MiniTimerPanelController.hideMainWindow`). The `orderOut` makes
     ///   AppKit run its last-window-closed termination check (#30, mechanism
     ///   on `FocusTrackerAppDelegate`); the flag is already on here, so the
-    ///   delegate answers `false` and the app stays running.
+    ///   delegate answers `false` and the app stays running. Idempotent and
+    ///   repeatable: a redundant delivery (epoch re-bump while collapsed)
+    ///   re-asserts the same presentation — `MiniTimerPanelController.show`
+    ///   reuses the live panel (or recreates it if it was lost) and orders
+    ///   it front; `orderOut` on an already-hidden window is a no-op.
     /// - **Restore** (`.timerView`, flag off): orderFront the main window
     ///   FIRST, then dismiss the panel (issue #30 pinned order — the swap's
     ///   two halves run inside one sync so the visual difference is
@@ -178,7 +206,7 @@ struct FocusTrackerApp: App {
     ///   harmless no-op).
     ///
     /// No persistence of mini state: the app quitting takes the panel with
-    /// it, and a relaunch starts on the full view (`isMiniTimerActive` is
+    /// it, and a relaunch defaults to the full view (`isMiniTimerActive` is
     /// in-memory only; the #14 recovery flow resurfaces a pending session in
     /// the full window).
     private func syncMiniPanel() {
