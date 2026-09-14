@@ -154,6 +154,30 @@ struct FocusTrackerApp: App {
                                 },
                                 onCancel: { model.cancelSessionStart() })
                         }
+                case .recoveryPrompt(let snapshot, let context):
+                    // The recovery prompt (issue #36): ONE phase-driven
+                    // presentation — the #22 modal pattern — whenever a
+                    // recovered (unfinished) session awaits the user's
+                    // choice. It appears on EVERY launch path with a pending
+                    // snapshot (normal launch, quit-with-running-session,
+                    // crash recovery) because `bootstrap()` is the single
+                    // surfacing site and the phase is swapped there; the
+                    // #19 `.pendingRecoveryUnresolved` refusal stays as the
+                    // defensive backstop. The sheet presents over the task
+                    // list (the `.sessionStart` shape — Discard lands right
+                    // back on Tasks) and interactive dismissal stays
+                    // disabled: the flow resolves only through Resume
+                    // (→ `.timerView`) or the confirmed Discard (→
+                    // `.tasksView`, starts allowed). The snapshot/context
+                    // payload is read-only here — both actions are the
+                    // model's.
+                    TasksView(model: model)
+                        .sheet(isPresented: .constant(true)) {
+                            RecoveryPromptView(
+                                snapshot: snapshot, context: context,
+                                model: model)
+                                .interactiveDismissDisabled(true)
+                        }
                 }
             }
             // The break-log warning (issue #23 criterion 18): the small

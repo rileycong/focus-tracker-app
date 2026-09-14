@@ -367,7 +367,18 @@ final class AppModelSessionStartTests: XCTestCase {
         XCTAssertFalse(model.isSessionActive)
         XCTAssertEqual(model.sessionState, .idle)
         XCTAssertEqual(model.pendingSessionRecovery, pendingSnapshot)
-        XCTAssertEqual(model.appPhase, .tasksView)
+        // Issue #36: the pending state is PRESENTED as the phase-driven
+        // recovery prompt (this seeded snapshot's task ID is unknown, so
+        // the wording is the honest generic one); the start refusal above
+        // stays as the defensive backstop behind it.
+        XCTAssertEqual(
+            model.appPhase,
+            .recoveryPrompt(
+                pendingSnapshot,
+                AppModel.SessionContext(
+                    taskID: pendingSnapshot.taskID,
+                    title: AppModel.recoveredSessionGenericTitle,
+                    parentTaskTitle: nil, project: nil, categories: [])))
 
         // After the user resolves the pending state, the same start succeeds.
         XCTAssertEqual(model.discardPendingSession(), .discarded)

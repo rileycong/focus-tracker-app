@@ -465,7 +465,15 @@ final class AppModelExpiryAlarmTests: XCTestCase {
             model.isExpiryAlarmActive,
             "an explicitly resumed expired session is handled — not instantly re-ended")
         XCTAssertEqual(beeps.count, 0)
-        XCTAssertEqual(model.appPhase, .tasksView, "the watcher touches nothing here")
+        // Issue #36: the restore now lands on the timer (the recovery
+        // prompt's Resume) — the watcher still touches nothing here.
+        XCTAssertEqual(
+            model.appPhase, .timerView(
+                AppModel.SessionContext(
+                    taskID: expired.taskID,
+                    title: AppModel.recoveredSessionGenericTitle,
+                    parentTaskTitle: nil, project: nil, categories: [])),
+            "the watcher touches nothing; the #36 prompt's Resume owns the swap")
     }
 
     // MARK: - Watcher re-arm on a fresh session

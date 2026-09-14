@@ -58,7 +58,12 @@ import Observation
 /// `ActiveSessionCoordinator.restore(from:)`) or `discardPendingSession()`
 /// (→ clears the pending state and the on-disk snapshot). The actual
 /// resume/end choice UI is #20/#22 — here it is only state + API, correctly
-/// derived. A `.corruptSnapshot` decision is treated as absent (the file was
+/// derived. **Issue #36 closes that deferred-UI gap** with ONE phase-driven
+/// prompt (the #22 modal pattern, presented by the app shell): surfacing a
+/// `.resume` decision ALSO swaps the app phase to `.recoveryPrompt`, and the
+/// prompt's two actions drive the phase from here — `restorePendingSession()`
+/// → `.timerView`, `discardPendingSession()` → `.tasksView`. A
+/// `.corruptSnapshot` decision is treated as absent (the file was
 /// already quarantined by the persistence layer — nothing lost, the decision
 /// itself does no I/O).
 ///
@@ -360,10 +365,10 @@ public final class AppModel {
     /// The observable app phase (issue #19, PRD §20.3): which screen the app
     /// shows. The start flow swaps to `.timerView` on success; the end flow
     /// (#22) moves it to `.endingSession` on confirm and to `.tasksView`
-    /// only when the required modal is submitted. The recovery choices
-    /// (`restorePendingSession`/`discardPendingSession`) deliberately do not
-    /// touch the phase: the actual resume/end choice UI is #20/#22, which
-    /// will drive the phase from their own flows.
+    /// only when the required modal is submitted. The recovery choices drive
+    /// the phase too (issue #36, closing #14's deferred-UI gap): surfacing a
+    /// pending recovery swaps to `.recoveryPrompt`, and the prompt's Resume
+    /// → `.timerView` / Discard → `.tasksView` (see that case).
     public enum AppPhase: Equatable, Sendable {
         case tasksView
         case timerView(SessionContext)
@@ -485,6 +490,40 @@ public final class AppModel {
         /// (no dismissal environment to fall back on — the phase owns
         /// the presentation).
         case sessionStart
+        /// The pending-recovery prompt (issue #36, PRD §9.5): a recovered
+        /// (unfinished) session awaits the user's Resume/Discard choice.
+        /// EXACTLY ONE presentation in the app shell — the #22 modal
+        /// pattern (`TasksView` underneath, sheet over it, interactive
+        /// dismissal disabled) — keyed off this phase so the prompt is
+        /// impossible to miss and impossible to duplicate: `bootstrap()`
+        /// is the single surfacing site (normal launch, quit-with-running-
+        /// session and crash recovery all converge there), and the pending
+        /// state is only consumed by the prompt's two actions.
+        ///
+        /// Payloads (engineer's choice, documented): the `snapshot` is the
+        /// #13 persisted image — the prompt's focused-time readout and the
+        /// session identity the actions resolve; the `SessionContext` is
+        /// resolved ONCE at surfacing (`recoveryContext(for:)`) — the
+        /// snapshot's task ID looked up in the just-reloaded inventory
+        /// (task or subtask at any depth, the #19 lookup shape), an
+        /// unknown ID (deleted target, changed vault) → the generic
+        /// `recoveredSessionGenericTitle` wording. The lookup result is
+        /// carried rather than re-derived so the prompt and the post-resume
+        /// timer show the SAME wording, and no view ever touches the store.
+        ///
+        /// While this phase is up, `startSession`/`startAdHocSession` are
+        /// unreachable from the UI (the prompt blocks the app; the #19
+        /// `.pendingRecoveryUnresolved` refusal stays as the defensive
+        /// backstop — verified). `setVaultPath` does not refuse (the
+        /// snapshot is app-local, not vault-bound — §13's pinned scope).
+        ///
+        /// Exits: `restorePendingSession()` (#14 API — the engine restores
+        /// per #13, autosave re-armed; #33 semantics — an already-expired
+        /// snapshot restores AT its expiry-instant state and the watcher is
+        /// marked handled) → `.timerView(context)`; `discardPendingSession()`
+        /// (after the prompt's typed, destructive confirm — the session was
+        /// never logged, §18 honest loss) → `.tasksView`, starts allowed.
+        case recoveryPrompt(ActiveSessionSnapshot, SessionContext)
     }
 
     /// The typed outcome of the #19 start orchestration (`Equatable` for
@@ -742,16 +781,18 @@ public final class AppModel {
 
     /// The startup sequence (call once after construction; the app root and
     /// tests call this). With a configured vault: reloads it and runs the #13
-    /// recovery surfacing. Without one: the model stays `.notConfigured` and
-    /// no recovery is surfaced (per the issue, recovery runs on start with a
-    /// *configured* vault).
+    /// recovery surfacing (issue #36: a `.resume` decision also swaps the app
+    /// phase to `.recoveryPrompt` — the app shell's ONE prompt presentation,
+    /// up before any other surface can start anything). Without one: the
+    /// model stays `.notConfigured` and no recovery is surfaced (per the
+    /// issue, recovery runs on start with a *configured* vault).
     public func bootstrap() async {
         guard vaultURL != nil else {
             vaultState = .notConfigured
             return
         }
         await reloadVault()
-        surfaceRecoveryIfSnapshotPresent()
+        await surfaceRecoveryIfSnapshotPresent()
     }
 
     // MARK: - Vault state
@@ -1034,15 +1075,27 @@ public final class AppModel {
         }
     }
 
-    // MARK: - Recovery surfacing (#13 → #20/#22 hand-off)
+    // MARK: - Recovery surfacing (#13 → #20/#22 hand-off, closed by #36)
 
     /// Runs the #13 recovery decision over the persisted snapshot and
-    /// surfaces the pending resume-or-end state when one is present.
-    private func surfaceRecoveryIfSnapshotPresent() {
+    /// surfaces the pending resume-or-discard state when one is present —
+    /// now ALSO the phase swap (issue #36): surfacing is the ONE entry to
+    /// the app shell's single prompt presentation, so the prompt appears on
+    /// every launch path that has a pending snapshot (normal launch,
+    /// quit-with-running-session, crash recovery — all converge on
+    /// `bootstrap()`).
+    private func surfaceRecoveryIfSnapshotPresent() async {
         let outcome = Result { try persistence.load() }
         switch ActiveSessionRecovery.decide(outcome) {
         case .resume(let snapshot):
             pendingSessionRecovery = snapshot
+            // Issue #36: the display context is resolved ONCE at surfacing —
+            // the vault reload just above refreshed the inventory, so the
+            // lookup answers with current titles; unknown ID → the generic
+            // wording (the session itself stays fully restorable: the engine
+            // carries its own task ID).
+            let context = await recoveryContext(for: snapshot)
+            appPhase = .recoveryPrompt(snapshot, context)
         case .idle:
             break
         case .corruptSnapshot:
@@ -1052,12 +1105,47 @@ public final class AppModel {
         }
     }
 
-    /// The "resume" choice of the pending resume-or-end state (the actual
-    /// UI is #20/#22): rehydrates the coordinator's engine from the pending
-    /// snapshot via `ActiveSessionCoordinator.restore(from:)` — which also
-    /// re-arms the autosave chain — and consumes the pending state. On a
-    /// thrown error the pending state is retained, so the decision is not
-    /// lost. Without a pending snapshot: the typed `.noPendingSession`.
+    /// The prompt's generic wording for a snapshot whose task ID is no
+    /// longer resolvable in the vault (issue #36 — "unknown ID → generic
+    /// wording"; public so the view and tests assert the exact string).
+    public static let recoveredSessionGenericTitle = "Recovered session"
+
+    /// Resolves the display context for a recovered snapshot (issue #36):
+    /// the #19 lookup shape (a subtask at any depth inherits the parent
+    /// task's project/categories, PRD §5.4; a top-level task shows its own
+    /// fields) — `.notFound`, or no configured vault, resolves to the
+    /// generic-wording context. Pure display resolution: nothing here
+    /// touches the session itself.
+    private func recoveryContext(
+        for snapshot: ActiveSessionSnapshot
+    ) async -> SessionContext {
+        let generic = SessionContext(
+            taskID: snapshot.taskID,
+            title: Self.recoveredSessionGenericTitle,
+            parentTaskTitle: nil, project: nil, categories: [])
+        guard let store = vaultStore else { return generic }
+        switch await store.lookup(snapshot.taskID) {
+        case .task(let task):
+            return SessionContext(
+                taskID: task.id, title: task.title, parentTaskTitle: nil,
+                project: task.project, categories: task.categories)
+        case .subtask(let subtask, in: let parent):
+            return SessionContext(
+                taskID: subtask.id, title: subtask.title,
+                parentTaskTitle: parent.title, project: parent.project,
+                categories: parent.categories)
+        case .notFound:
+            return generic
+        }
+    }
+
+    /// The "resume" choice of the pending resume-or-end state (the UI is
+    /// the #36 recovery prompt): rehydrates the coordinator's engine from
+    /// the pending snapshot via `ActiveSessionCoordinator.restore(from:)` —
+    /// which also re-arms the autosave chain — and consumes the pending
+    /// state. On a thrown error the pending state is retained, so the
+    /// decision is not lost. Without a pending snapshot: the typed
+    /// `.noPendingSession`.
     @discardableResult
     public func restorePendingSession() throws -> PendingRecoveryOutcome {
         guard let snapshot = pendingSessionRecovery else { return .noPendingSession }
@@ -1070,20 +1158,43 @@ public final class AppModel {
         // of an auto-ended expiry); a restore below the duration watches
         // normally and will legitimately expire later in this process.
         expiryWatchState = expiryWatchState(forRestoredSnapshot: snapshot)
+        // Issue #36: the prompt's Resume → the timer. The context resolved
+        // at surfacing is reused so the prompt and the timer show the SAME
+        // wording (the invariant is pending != nil ⟺ .recoveryPrompt is up;
+        // the generic fallback covers a defensive mismatch — e.g. the API
+        // called with a pending state surfaced before #36 — and never a
+        // wrong title).
+        if case .recoveryPrompt(_, let resolved) = appPhase,
+            resolved.taskID == snapshot.taskID {
+            appPhase = .timerView(resolved)
+        } else {
+            appPhase = .timerView(SessionContext(
+                taskID: snapshot.taskID,
+                title: Self.recoveredSessionGenericTitle,
+                parentTaskTitle: nil, project: nil, categories: []))
+        }
         return .restored
     }
 
-    /// The "end/let it go" choice of the pending resume-or-end state:
-    /// clears the pending state **and** the on-disk snapshot, so the same
-    /// snapshot cannot re-surface on the next launch. A failed on-disk clear
-    /// is deliberately non-fatal and fail-safe: the file is left in place and
-    /// will re-surface on the next launch — losing the user's session data
+    /// The "discard" choice of the pending resume-or-end state (the UI is
+    /// the #36 recovery prompt's typed, destructive confirm — the session
+    /// was never logged, so discarding is an honest §18 loss the user must
+    /// confirm): clears the pending state **and** the on-disk snapshot, so
+    /// the same snapshot cannot resurface on the next launch. On success
+    /// the phase returns to `.tasksView` when the prompt phase was up (the
+    /// invariant is pending != nil ⟺ `.recoveryPrompt` is up; the
+    /// conditional keeps a direct API call in other phases honest) — Tasks
+    /// stays, starts are allowed again. A failed on-disk clear is
+    /// deliberately non-fatal and fail-safe: the file is left in place and
+    /// will resurface on the next launch — losing the user's session data
     /// would be the unacceptable direction (PRD §18). Without a pending
     /// snapshot: the typed `.noPendingSession`.
     @discardableResult
     public func discardPendingSession() -> PendingRecoveryOutcome {
         guard pendingSessionRecovery != nil else { return .noPendingSession }
         pendingSessionRecovery = nil
+        // Issue #36: the prompt's Discard → back to Tasks (starts allowed).
+        if case .recoveryPrompt = appPhase { appPhase = .tasksView }
         do {
             try persistence.clear()
         } catch {
