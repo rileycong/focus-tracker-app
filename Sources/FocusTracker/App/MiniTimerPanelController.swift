@@ -56,6 +56,26 @@ enum MiniTimerPanelLayout {
             height: min(max(size.height, contentMinSize.height), contentMaxSize.height))
     }
 
+    /// Whether `frame` lies fully inside the union of `visibleFrames`
+    /// (issue #37): the show-path sanity check that heals a panel stranded
+    /// off-screen by a display change (lid open/close, display sleep,
+    /// rearrangement — the panel's frame outliving its screen). Pure and
+    /// unit-tested; `show()` resets a stranded panel to the default
+    /// top-right frame using this predicate.
+    static func frameIsFullyOnScreen(
+        _ frame: CGRect, visibleFrames: [CGRect]
+    ) -> Bool {
+        guard let union = visibleFrames.reduce(into: Optional<CGRect>.none, {
+            partial, visibleFrame in
+            if let current = partial {
+                partial = current.union(visibleFrame)
+            } else {
+                partial = visibleFrame
+            }
+        }) else { return false }
+        return union.contains(frame)
+    }
+
     /// The countdown digit size for a panel content size (issue #28):
     /// piecewise-linear on the (clamped) content height —
     /// `countdownMinFontSize` at `contentMinSize.height`, the #15 token base
@@ -207,14 +227,58 @@ final class MiniTimerPanelController {
     func show(context: AppModel.SessionContext) {
         if panel == nil { panel = makePanel() }
         guard let panel else { return }
+        // Issue #37 self-healing: a panel whose frame no longer sits on any
+        // screen (display sleep/lid/rearrangement while the frame survived)
+        // is silently invisible to the user — reset it to the default
+        // top-right frame for the current screen situation.
+        let visibleFrames = NSScreen.screens.map(\.visibleFrame)
+        if !MiniTimerPanelLayout.frameIsFullyOnScreen(panel.frame, visibleFrames: visibleFrames) {
+            panel.setFrame(
+                MiniTimerPanelLayout.defaultTopRightFrame(
+                    visibleFrame: NSScreen.main?.visibleFrame
+                        ?? visibleFrames.first
+                        ?? CGRect(x: 0, y: 0, width: 1440, height: 900)),
+                display: true)
+        }
         if panel.contentView == nil {
             panel.contentView = NSHostingView(
                 rootView: MiniTimerView(context: context, model: model))
         }
         // PINNED show call (see the type documentation): order front with no
         // key/activate round-trip — a borderless NSPanel cannot become key,
-        // so the user's keyboard focus stays where it was.
+        // so the user's keyboard focus stays where it was. Re-asserting on
+        // an ordered-out (vanish/lost-edge) panel resurrects it.
         panel.makeKeyAndOrderFront(nil)
+    }
+
+    /// Whether a panel object currently exists (created, not yet torn
+    /// down). Watchdog bookkeeping — the #37 presentation watchdog uses it
+    /// to notice a panel that outlived its flag.
+    var hasLivePanel: Bool { panel != nil }
+
+    /// #37 harness hook (`AutoCollapseDemo`'s ghost variant): orders the
+    /// panel's window OUT while deliberately keeping the controller's
+    /// reference alive — the exact "panel gone from the window server while
+    /// the flag stays on" ghost of the #31/#37 stuck states, reproducible
+    /// in-process. NOT a normal-lifecycle call; production code always goes
+    /// through `dismiss()`.
+    func ghostOutPanelWindowForDiagnostics() {
+        panel?.orderOut(nil)
+    }
+
+    /// The live panel's window-visible facts for the #37 diagnostic harness
+    /// (`AutoCollapseDemo`'s snapshots): window number, visibility, frame,
+    /// level, alpha, occlusion, parenting and screen. nil while no panel
+    /// exists — which is itself the diagnostic.
+    var panelDiagnostics: String? {
+        guard let panel else { return nil }
+        let frame = panel.frame
+        let screen = panel.screen.map { "\($0.localizedName)" } ?? "nil"
+        return "panel #\(panel.windowNumber) visible=\(panel.isVisible)"
+            + " frame=\(frame) level=\(panel.level.rawValue)"
+            + " alpha=\(panel.alphaValue)"
+            + " occlusionVisible=\(panel.occlusionState.contains(.visible))"
+            + " children=\(panel.childWindows?.count ?? 0) screen=\(screen)"
     }
 
     /// Closes the panel completely: ordered out, content released, and the
@@ -227,6 +291,44 @@ final class MiniTimerPanelController {
     }
 
     // MARK: - Main-window swap helpers (issue #21 criterion 3)
+
+    /// The ONE level-driven presentation reconciler (issue #37): re-derives
+    /// the whole mini/full presentation from current observable state and
+    /// re-asserts it, with two properties the #37 evidence demands:
+    ///
+    /// - **Repair-only writes.** The full-window branch only touches the
+    ///   main window when the mini flag is actually on (or the end-flow
+    ///   left a panel behind) — a user-minimized (Cmd+M) window in a normal
+    ///   state is never raised, and an already-correct presentation is
+    ///   untouched (`orderOut`/redundant orderFront are no-ops, but they
+    ///   are simply skipped when nothing is wrong).
+    /// - **Idempotent + repeatable.** Safe to call from any delivery — the
+    ///   epoch-driven `.onChange` sync, the end-flow phase change, or the
+    ///   #37 watchdog's ~1 s cadence. Every call converges on the same
+    ///   presentation for the same state, so ANY vanish (lost delivery,
+    ///   force-removed window, display change) heals on the next run.
+    ///
+    /// - **Collapse** (`.timerView` + flag on): show the panel (which
+    ///   recreates/repairs/re-asserts it — see `show`), then `orderOut` the
+    ///   main window.
+    /// - **Restore/end** (otherwise): orderFront the main window FIRST
+    ///   (pinned #30 order — the swap's halves inside one sync so the
+    ///   panel can never be the "last window" mid-check), then dismiss the
+    ///   panel. Runs on every end path because `endSession` clears the
+    ///   flag before the phase swap delivers.
+    static func reconcilePresentation(
+        model: AppModel, panel: MiniTimerPanelController
+    ) {
+        if case .timerView(let context) = model.appPhase, model.isMiniTimerActive {
+            panel.show(context: context)
+            hideMainWindow()
+        } else {
+            if panel.hasLivePanel {
+                showMainWindow()
+                panel.dismiss()
+            }
+        }
+    }
 
     /// **Pinned choice (issue #21, documented): collapse uses
     /// `orderOut(_:)`, NOT `miniaturize(_:)`.** `orderOut` truly removes the
@@ -375,9 +477,48 @@ final class FocusTrackerAppDelegate: NSObject, NSApplicationDelegate {
     /// `FocusTrackerApp.init`; `nil` = unwired (fail-safe default `true`).
     weak var model: AppModel?
 
+    /// The mini panel controller, wired alongside `model` (issue #37): the
+    /// presentation watchdog below reconciles through it.
+    weak var miniPanel: MiniTimerPanelController?
+
+    /// The #37 presentation watchdog: a single ~1 s task, started once at
+    /// launch, that runs the level-driven `reconcilePresentation` whenever
+    /// a session lifecycle is open (the only period the app owns the
+    /// window presentation). This is the structural fix for the #37 stuck
+    /// state: #31's epoch made every CLICK re-deliver the sync, but the
+    /// real run still stranded a vanished presentation — a delivery-driven
+    /// design has no answer when the vanish itself eats the delivery
+    /// (and the user's next click may be a refused no-op, as the 84129
+    /// forensics show). Level-driven reconciliation on a cadence makes the
+    /// stuck state unreachable: any divergence between the observable
+    /// state and the actual windows heals within ~1 s, whatever caused it.
+    /// The loop is one task, one sleep, no retained self (weak), and only
+    /// runs while the app owns the presentation — in every other state it
+    /// is a no-op poll.
+    private var presentationWatchdog: Task<Void, Never>?
+
+    func applicationDidFinishLaunching(_ notification: Notification) {
+        presentationWatchdog = Task { [weak self] in
+            while !Task.isCancelled {
+                try? await Task.sleep(nanoseconds: 1_000_000_000)
+                guard let self, let model = self.model,
+                    let miniPanel = self.miniPanel,
+                    model.isSessionActive || model.isMiniTimerActive
+                        || miniPanel.hasLivePanel
+                else { continue }
+                MiniTimerPanelController.reconcilePresentation(
+                    model: model, panel: miniPanel)
+            }
+        }
+    }
+
     func applicationShouldTerminateAfterLastWindowClosed(
         _ sender: NSApplication
     ) -> Bool {
+        // The #37 watchdog is deliberately NOT cancelled here: this policy
+        // is consulted on EVERY main-window leave (each collapse), and the
+        // watchdog must keep reconciling across those. It lives for the
+        // process (weak self, one sleep — no leak) and dies with it.
         !(model?.isMiniTimerActive ?? false)
     }
 }

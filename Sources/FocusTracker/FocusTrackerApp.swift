@@ -31,6 +31,10 @@ struct FocusTrackerApp: App {
         _model = State(initialValue: AppModel(settings: settings))
         _miniPanel = State(initialValue: MiniTimerPanelController(model: _model.wrappedValue))
         appDelegate.model = _model.wrappedValue
+        // Issue #37: the delegate's presentation watchdog reconciles through
+        // the same controller instance the shell's sync drives (the same
+        // wiring pattern as `model` above).
+        appDelegate.miniPanel = _miniPanel.wrappedValue
     }
 
     var body: some Scene {
@@ -199,6 +203,12 @@ struct FocusTrackerApp: App {
                 }
             }
             .task { await model.bootstrap() }
+            // The #37 diagnostic harness (Sources/FocusTracker/App/
+            // AutoCollapseDemo.swift): a no-op unless the process was
+            // launched with `-autoCollapseDemo`.
+            .task {
+                await AutoCollapseDemo.runIfNeeded(model: model, miniPanel: miniPanel)
+            }
             // The mini-panel ↔ main-window sync (issue #21): fires on a
             // collapse (`isMiniTimerActive` flip while the phase stays
             // `.timerView`), on a restore (flag off), and on any end path
@@ -218,64 +228,15 @@ struct FocusTrackerApp: App {
         }
     }
 
-    /// The single place that drives the mini panel and the main window's
-    /// visibility from the observable model state (issue #21 criteria 3–5;
-    /// re-delivery/self-healing issue #31):
-    ///
-    /// # Root cause of the #31 "no mini panel appears; second attempt dead"
-    /// The pre-#31 sync was driven by `.onChange(of: isMiniTimerActive)` —
-    /// an EDGE. The user's stuck instance (forensically dumped live via the
-    /// macOS window server: main window visible again, NO panel window in
-    /// the server's window list, flag stranded on) is exactly the lost-edge
-    /// deadlock: once the panel presentation diverges from the flag — a
-    /// sync delivery lost in a restructure, or the panel dismissed while
-    /// the flag stays on — no future state edge can repair it, and the
-    /// user's next Mini click sets `true→true`, which fires nothing. The
-    /// fix is structural: the sync is LEVEL-driven (it re-derives the whole
-    /// presentation from current state every run) and every accepted
-    /// collapse/restore request bumps `miniTimerPresentationEpoch`, so
-    /// every click re-delivers a sync run — a dead/stale presentation is
-    /// re-asserted (panel recreated + ordered front, window re-hidden)
-    /// instead of stranding mini mode.
-    ///
-    /// - **Collapse** (`.timerView` + `isMiniTimerActive`): show the mini
-    ///   panel without stealing focus, then `orderOut` the main window (the
-    ///   pinned choice over `miniaturize` — see
-    ///   `MiniTimerPanelController.hideMainWindow`). The `orderOut` makes
-    ///   AppKit run its last-window-closed termination check (#30, mechanism
-    ///   on `FocusTrackerAppDelegate`); the flag is already on here, so the
-    ///   delegate answers `false` and the app stays running. Idempotent and
-    ///   repeatable: a redundant delivery (epoch re-bump while collapsed)
-    ///   re-asserts the same presentation — `MiniTimerPanelController.show`
-    ///   reuses the live panel (or recreates it if it was lost) and orders
-    ///   it front; `orderOut` on an already-hidden window is a no-op.
-    /// - **Restore** (`.timerView`, flag off): orderFront the main window
-    ///   FIRST, then dismiss the panel (issue #30 pinned order — the swap's
-    ///   two halves run inside one sync so the visual difference is
-    ///   imperceptible): a regular window is visible again before the
-    ///   panel's `orderOut`, so the panel can never be the "last window" in
-    ///   AppKit's termination check while the flag is already off — the
-    ///   end-from-mini path cannot trip the check. The full
-    ///   `.timerView(context)` display is intact (the phase never left
-    ///   `.timerView`, so no content was torn down).
-    /// - **Any end path** (`.endingSession` while the required modal is up,
-    ///   then `.tasksView` after submission): bring the main window back and
-    ///   dismiss the panel — covers End-from-mini (the window was hidden;
-    ///   the restored main window shows the timer with the #22 modal over
-    ///   it) and End-from-full (already visible; the extra orderFront is a
-    ///   harmless no-op).
-    ///
-    /// No persistence of mini state: the app quitting takes the panel with
-    /// it, and a relaunch defaults to the full view (`isMiniTimerActive` is
-    /// in-memory only; the #14 recovery flow resurfaces a pending session in
-    /// the full window).
+    /// The observable-driven window-sync delivery (issue #21 criteria 3–5;
+    /// re-delivery/self-healing issue #31; level-driven reconciler #37):
+    /// the delivery sites (the `.onChange`s above) feed the ONE shared
+    /// reconciler — `MiniTimerPanelController.reconcilePresentation` — the
+    /// same level-driven body the #37 presentation watchdog runs on its ~1 s
+    /// cadence, so every path converges on the identical presentation logic
+    /// and none can drift. See that method for the per-state contract.
     private func syncMiniPanel() {
-        if case .timerView(let context) = model.appPhase, model.isMiniTimerActive {
-            miniPanel.show(context: context)
-            MiniTimerPanelController.hideMainWindow()
-        } else {
-            MiniTimerPanelController.showMainWindow()
-            miniPanel.dismiss()
-        }
+        MiniTimerPanelController.reconcilePresentation(
+            model: model, panel: miniPanel)
     }
 }
