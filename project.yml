@@ -21,6 +21,7 @@ targets:
       - Sources/FocusTracker
     dependencies:
       - package: Yams
+      - sdk: AVFoundation.framework
     info:
       path: Sources/FocusTracker/Info.plist
       properties:

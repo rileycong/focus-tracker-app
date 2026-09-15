@@ -37,6 +37,12 @@ final class AppModelBreakTests: XCTestCase {
 
     private final class FocusProbe { var isActive = true }
     private final class BeepCounter { var count = 0 }
+    private final class CountingPlayer: ExpiryAlarmPlaying {
+        let counter: BeepCounter
+        init(counter: BeepCounter) { self.counter = counter }
+        func play() throws { counter.count += 1 }
+        func stop() {}
+    }
 
     // MARK: - Fixture access
 
@@ -107,7 +113,8 @@ final class AppModelBreakTests: XCTestCase {
         let probe = focusProbe!
         let counter = beeps!
         let alarm = ExpiryAlarmController(
-            beep: { counter.count += 1 }, isAppActive: { probe.isActive })
+            player: CountingPlayer(counter: counter),
+            isAppActive: { probe.isActive })
         let model = AppModel(
             settings: settings, persistenceDirectory: persistenceDirectory,
             scheduler: ManualTickScheduler(), sessionClock: clock,

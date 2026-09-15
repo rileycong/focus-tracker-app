@@ -386,8 +386,9 @@ public extension FocusSessionEngine {
     ///
     /// Consequence (pinned honest loss statement): everything accumulated
     /// after this capture and before the close/crash lives only in memory —
-    /// bounded loss ≤ 1 autosave interval (cadence contract on
-    /// `ActiveSessionCoordinator`); recovery from this save point is exact.
+    /// bounded loss ≤ 1 second at the production autosave cadence (cadence
+    /// contract on `ActiveSessionCoordinator`); recovery from this save point
+    /// is exact. Clean termination adds a final exact-instant capture.
     func captureSnapshot() -> ActiveSessionSnapshot? {
         guard let active = state else { return nil }
         let now = clock.monotonicSeconds

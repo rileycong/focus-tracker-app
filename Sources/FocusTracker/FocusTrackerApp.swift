@@ -4,6 +4,8 @@ import SwiftUI
 struct FocusTrackerApp: App {
     @State private var model: AppModel
     @State private var windowPresentation: MainWindowPresentationController
+    @NSApplicationDelegateAdaptor(FocusTrackerAppDelegate.self)
+    private var appDelegate: FocusTrackerAppDelegate
 
     init() {
         let settings: AppSettings
@@ -12,8 +14,12 @@ struct FocusTrackerApp: App {
         } catch {
             settings = AppSettings(defaults: .standard)
         }
-        _model = State(initialValue: AppModel(settings: settings))
+        let model = AppModel(settings: settings)
+        _model = State(initialValue: model)
         _windowPresentation = State(initialValue: MainWindowPresentationController())
+        appDelegate.snapshotSave = { [weak model] in
+            model?.saveActiveSessionSnapshotForTermination()
+        }
     }
 
     var body: some Scene {

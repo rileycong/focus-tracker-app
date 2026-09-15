@@ -31,7 +31,9 @@ public protocol ActiveSessionTickScheduler: AnyObject, Sendable {
 ///
 /// # Honest loss statement (pinned, issue #13 criterion 3)
 /// Time since the last save lives only in memory, so a hard crash loses at
-/// most **≤ 1 autosave interval** of focused/paused time. The snapshot's
+/// most **≤ 1 second** of focused/paused time at the production cadence. A
+/// clean termination performs one final synchronous snapshot save, preserving
+/// the exact remaining time at quit. The snapshot's
 /// anchor makes recovery from the last save point exact (restoration math on
 /// `ActiveSessionSnapshot` / `FocusSessionEngine.restore(from:)`).
 ///
@@ -163,6 +165,24 @@ public final class ActiveSessionCoordinator: @unchecked Sendable {
                 failure = error
             }
             scheduleNextTickLocked()
+        }
+        lock.unlock()
+        if let failure { onPersistenceError?(failure) }
+    }
+
+    /// Best-effort final save for clean app termination. The caller must never
+    /// delay or veto termination for persistence, so failures are reported and
+    /// swallowed. Capturing under the coordinator lock uses the engine's clock
+    /// at this exact call, including the currently open run/pause segment.
+    public func saveSnapshotForTermination() {
+        var failure: (any Error)?
+        lock.lock()
+        if engine.isActive {
+            do {
+                try saveSnapshotLocked()
+            } catch {
+                failure = error
+            }
         }
         lock.unlock()
         if let failure { onPersistenceError?(failure) }

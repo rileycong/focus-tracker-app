@@ -16,9 +16,21 @@ final class ExpiryAlarmControllerTests: XCTestCase {
 
     // MARK: - Test doubles
 
-    /// The injected beep action's counter (no real `NSBeep` in tests).
     private final class BeepCounter {
         var count = 0
+    }
+
+    private final class PlayerSpy: ExpiryAlarmPlaying {
+        var playCount = 0
+        var stopCount = 0
+        var shouldFail = false
+
+        func play() throws {
+            playCount += 1
+            if shouldFail { throw ExpiryAlarmPlayerError.playbackFailed }
+        }
+
+        func stop() { stopCount += 1 }
     }
 
     /// Records `onStateChange` deliveries in order.
@@ -30,6 +42,7 @@ final class ExpiryAlarmControllerTests: XCTestCase {
     // MARK: - Fixture access
 
     private var beeps: BeepCounter!
+    private var player: PlayerSpy!
     private var stateLog: StateLog!
     private var focusBackCount = 0
     private var controller: ExpiryAlarmController!
@@ -44,12 +57,15 @@ final class ExpiryAlarmControllerTests: XCTestCase {
 
     private func makeController() -> ExpiryAlarmController {
         let counter = BeepCounter()
+        let player = PlayerSpy()
         let log = StateLog()
         beeps = counter
+        self.player = player
         stateLog = log
         focusBackCount = 0
         let alarm = ExpiryAlarmController(
-            beep: { counter.count += 1 },
+            player: player,
+            fallbackBeep: { counter.count += 1 },
             isAppActive: { false })
         alarm.onStateChange = { log.record($0) }
         alarm.onFocusBack = { [weak self] in self?.focusBackCount += 1 }
@@ -67,12 +83,13 @@ final class ExpiryAlarmControllerTests: XCTestCase {
     func testStartActivatesAlarmAndBeepsImmediately() {
         let alarm = makeController()
         XCTAssertFalse(alarm.isAlarming)
-        XCTAssertEqual(beeps.count, 0)
+        XCTAssertEqual(player.playCount, 0)
 
         alarm.start()
 
         XCTAssertTrue(alarm.isAlarming, "start → alarming")
-        XCTAssertEqual(beeps.count, 1, "the first beep is immediate")
+        XCTAssertEqual(player.playCount, 1, "the first media beep is immediate")
+        XCTAssertEqual(beeps.count, 0, "successful media playback needs no fallback")
         XCTAssertEqual(stateLog.values, [true], "shake flag on")
     }
 
@@ -83,7 +100,7 @@ final class ExpiryAlarmControllerTests: XCTestCase {
         alarm.start()
 
         XCTAssertTrue(alarm.isAlarming)
-        XCTAssertEqual(beeps.count, 1, "no beep restarts on repeated starts")
+        XCTAssertEqual(player.playCount, 1, "no beep restarts on repeated starts")
         XCTAssertEqual(stateLog.values, [true], "no repeated state flips")
     }
 
@@ -96,11 +113,12 @@ final class ExpiryAlarmControllerTests: XCTestCase {
 
         XCTAssertFalse(alarm.isAlarming, "stop → not alarming")
         XCTAssertEqual(stateLog.values, [true, false], "shake flag off")
-        XCTAssertEqual(beeps.count, 1, "stop invalidates the beep timer")
+        XCTAssertEqual(player.playCount, 1, "stop invalidates the beep timer")
+        XCTAssertEqual(player.stopCount, 1, "stop silences the retained player")
         // The observer is removed on stop: a later activation is ignored.
         postDidBecomeActive()
         XCTAssertEqual(focusBackCount, 0, "no focus-back after stop")
-        XCTAssertEqual(beeps.count, 1, "no beep from the ignored activation")
+        XCTAssertEqual(player.playCount, 1, "no beep from the ignored activation")
     }
 
     func testStopIsIdempotentWhenNotAlarming() {
@@ -119,14 +137,14 @@ final class ExpiryAlarmControllerTests: XCTestCase {
     func testFocusBackWhileAlarmingStopsAndDeliversFocusBackOnce() {
         let alarm = makeController()
         alarm.start()
-        beeps.count = 0  // isolate the post-start window
+        player.playCount = 0  // isolate the post-start window
 
         postDidBecomeActive()
 
         XCTAssertFalse(alarm.isAlarming, "focus-back stops the alarm")
         XCTAssertEqual(stateLog.values, [true, false], "shake flag off")
         XCTAssertEqual(focusBackCount, 1, "exactly one focus-back delivery")
-        XCTAssertEqual(beeps.count, 0, "no further beeps after focus-back")
+        XCTAssertEqual(player.playCount, 0, "no further beeps after focus-back")
 
         // A second activation (no new alarm) delivers nothing.
         postDidBecomeActive()
@@ -140,5 +158,27 @@ final class ExpiryAlarmControllerTests: XCTestCase {
         XCTAssertFalse(alarm.isAlarming)
         XCTAssertEqual(focusBackCount, 0, "no alarm → no focus-back signal")
         XCTAssertEqual(stateLog.values, [])
+    }
+
+    func testPlaybackFailureFallsBackOnEveryCadencePulse() {
+        let alarm = makeController()
+        player.shouldFail = true
+
+        alarm.start()
+        alarm.playAlarmPulse()
+
+        XCTAssertEqual(player.playCount, 2, "immediate + one deterministic repeat")
+        XCTAssertEqual(beeps.count, 2, "every failed media play uses system fallback")
+    }
+
+    func testSuccessfulCadenceRepeatReusesPlayerWithoutFallback() {
+        let alarm = makeController()
+        alarm.start()
+
+        alarm.playAlarmPulse()
+        alarm.playAlarmPulse()
+
+        XCTAssertEqual(player.playCount, 3, "immediate + two repeats")
+        XCTAssertEqual(beeps.count, 0)
     }
 }

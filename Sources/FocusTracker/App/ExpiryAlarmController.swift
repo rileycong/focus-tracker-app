@@ -1,139 +1,128 @@
 import AppKit
+import AVFoundation
 
-/// The shared expiry alarm of issues #33/#38: repeated system beeps (~1×/s)
-/// plus the focus-back watch (`NSApplication.didBecomeActiveNotification`).
-/// `AppModel` owns lifecycle dispatch: focus-session expiry enters the #22
-/// modal, while break expiry logs and routes to session start.
-///
-/// # AppKit isolation (house pattern)
-/// This is the alarm's ONE AppKit seam — the system beep (`NSSound.beep()`,
-/// the Swift surface of AppKit's C `NSBeep`, which the apinotes hide from
-/// Swift — see `init`), `NSApplication`'s
-/// activation notification and the run-loop timer live here and nowhere else
-/// (the main-window presentation precedent: AppKit usage is isolated to its
-/// own file; `AppModel` stays AppKit-free and owns this controller instead).
-/// The beep action and the app-active probe are injected closures, so tests
-/// drive the whole state machine without touching AppKit: they count beeps
-/// through the injected action and flip the probe's answer, and they deliver
-/// the focus-back signal by posting
-/// `NSApplication.didBecomeActiveNotification` themselves (selector-based
-/// observers deliver synchronously on the posting thread — deterministic).
-///
-/// # Window-scene single-window note (issue #27 amendment)
-/// The app has exactly one `Window`-scene window (plus the non-activating
-/// mini panel), so "the app is focused" is exactly `NSApplication.isActive`:
-/// there is no second window whose key status could diverge. Ordering the
-/// main window out (mini mode) does not deactivate the app by itself, but a
-/// mini-collapsed user working in another app IS unfocused — the alarm's
-/// focus-back signal remains plain app activation (Dock click / Cmd-Tab /
-/// clicking any app window), which is also what `FocusTrackerApp`'s
-/// observable-driven sync needs to restore the main window for the modal.
-///
-/// # State machine (pinned, issue #33)
-/// `stop()`/`start()` are the only transitions; `start()` is idempotent, so
-/// repeated watcher ticks while the user ignores the alarm re-deliver
-/// nothing (no beep restarts, no timer pile-up — the ONE repeating timer is
-/// invalidated on `stop()`, and the notification observer is registered on
-/// start and removed on stop, so nothing outlives the alarm: bounded
-/// memory). `start()` beeps IMMEDIATELY (expiry just happened — waiting a
-/// full second for the first beep would mute the alarm's onset) and then
-/// every `beepInterval` seconds on the main run loop in `.common` mode (so
-/// beeps survive modal/tracking run-loop modes while the sheet is up).
-/// Becoming active while alarming is the focus-back event: the alarm stops
-/// itself FIRST (the shake flag and the beeps end before any end-of-session
-/// work runs) and then reports `onFocusBack` — the model's auto-end.
-///
-/// # Threading
-/// `@MainActor` throughout. The repeating timer fires on the main run loop
-/// (the block re-enters the actor via `MainActor.assumeIsolated` — the run
-/// loop IS the main thread); `NSApplication` posts `didBecomeActive` on the
-/// main thread. The controller is owned by the `@MainActor` `AppModel` and
-/// only ever deallocated on the main actor; `deinit` still tears the timer
-/// and observer down as a safety net so an armed alarm can never outlive its
-/// owner (no runaway timers — the "loop survives a long unfocused stretch,
-/// bounded memory" criterion).
-///
-/// `public` deliberately: it is an injectable seam of `AppModel`'s public
-/// init (the `FocusSessionClock` / `ActiveSessionTickScheduler` precedent —
-/// every seam the composition root takes is public for tests).
+/// Injectable media-output player used by the shared focus/break alarm.
+/// Production uses `AVAudioPlayer`; tests provide a hardware-free spy.
+@MainActor
+public protocol ExpiryAlarmPlaying: AnyObject {
+    func play() throws
+    func stop()
+}
+
+public enum ExpiryAlarmPlayerError: Error {
+    case playbackFailed
+}
+
+/// One bounded `AVAudioPlayer` backed by a deterministic in-memory WAV. Media
+/// output is intentionally used instead of the often-muted system alert
+/// channel. No package, generated file, or notification permission is needed.
+@MainActor
+public final class AVAudioExpiryAlarmPlayer: ExpiryAlarmPlaying {
+    private var player: AVAudioPlayer?
+
+    public init() {}
+
+    public func play() throws {
+        let player: AVAudioPlayer
+        if let existing = self.player {
+            player = existing
+        } else {
+            let created = try AVAudioPlayer(data: Self.beepWAV())
+            created.volume = 0.8
+            created.prepareToPlay()
+            self.player = created
+            player = created
+        }
+        player.currentTime = 0
+        guard player.play() else { throw ExpiryAlarmPlayerError.playbackFailed }
+    }
+
+    public func stop() {
+        player?.stop()
+        player?.currentTime = 0
+    }
+
+    /// 160 ms, 880 Hz, mono unsigned 8-bit PCM at 8 kHz.
+    private static func beepWAV() -> Data {
+        let sampleRate: UInt32 = 8_000
+        let sampleCount = 1_280
+        var samples = [UInt8](repeating: 128, count: sampleCount)
+        for index in samples.indices {
+            let envelope = min(1.0, Double(index) / 80.0)
+                * min(1.0, Double(sampleCount - index) / 120.0)
+            let wave = sin(2 * Double.pi * 880 * Double(index) / Double(sampleRate))
+            samples[index] = UInt8(clamping: Int(128 + 76 * envelope * wave))
+        }
+
+        var data = Data()
+        func appendASCII(_ value: String) { data.append(contentsOf: value.utf8) }
+        func appendLE<T: FixedWidthInteger>(_ value: T) {
+            var littleEndian = value.littleEndian
+            withUnsafeBytes(of: &littleEndian) { data.append(contentsOf: $0) }
+        }
+        appendASCII("RIFF")
+        appendLE(UInt32(36 + samples.count))
+        appendASCII("WAVEfmt ")
+        appendLE(UInt32(16))
+        appendLE(UInt16(1))
+        appendLE(UInt16(1))
+        appendLE(sampleRate)
+        appendLE(sampleRate)
+        appendLE(UInt16(1))
+        appendLE(UInt16(8))
+        appendASCII("data")
+        appendLE(UInt32(samples.count))
+        data.append(contentsOf: samples)
+        return data
+    }
+}
+
+/// Shared focus/break expiry alarm: an immediate media-output beep followed
+/// by one beep per second, plus the app focus-back watch. Start/stop are
+/// idempotent and own exactly one player, timer, and notification observer.
+/// Any player setup or playback failure falls back to `NSSound.beep()`.
 @MainActor
 public final class ExpiryAlarmController: NSObject {
-
-    /// The pinned beep cadence (issue #33: "~1×/s").
     public static let beepInterval: TimeInterval = 1.0
 
-    /// The injected beep action (production: the system beep via
-    /// `NSSound.beep()`; tests: a counter).
-    private let beepAction: () -> Void
-    /// The injected app-active probe (production: `NSApplication.shared
-    /// .isActive`; tests: a mutable flag) — the "expiry while focused vs
-    /// unfocused" decision input the model reads at expiry time.
+    private let player: any ExpiryAlarmPlaying
+    private let fallbackBeep: () -> Void
     private let isAppActiveProvider: () -> Bool
-
-    /// The one repeating beep timer; non-nil exactly while alarming.
-    /// `nonisolated(unsafe)` ONLY for the deinit safety net: the owner is
-    /// `@MainActor` and deallocates on the main actor, so the deinit
-    /// invalidation below runs on the main thread like every other access.
     nonisolated(unsafe) private var beepTimer: Timer?
 
-    /// Whether the alarm is currently running (beeps armed + focus-back
-    /// watch registered). Drives `AppModel.isExpiryAlarmActive` through
-    /// `onStateChange` — the shake animation's flag.
     public private(set) var isAlarming = false
-
-    /// Delivered on start (true) and stop (false), on the main actor.
     public var onStateChange: ((Bool) -> Void)?
-    /// Delivered exactly once per alarm, after the focus-back stop: the
-    /// model's signal to finish whichever expired lifecycle armed the alarm.
     public var onFocusBack: (() -> Void)?
 
-    /// - Parameters:
-    /// - Parameters:
-    ///   - beep: The beep action; defaults to the system beep. Note (pinned
-    ///     intent, issue #33): the issue's "system beep via `NSBeep`" is the
-    ///     AppKit system beep — in Swift the C `NSBeep` symbol is marked
-    ///     SwiftPrivate in the SDK apinotes and cannot be named, so the
-    ///     default uses `NSSound.beep()`, AppKit's Swift-facing wrapper of
-    ///     the exact same system beep. No new dependency, no notification
-    ///     permission.
-    ///   - isAppActive: The app-focus probe; defaults to
-    ///     `NSApplication.shared.isActive`.
     public init(
-        beep: @escaping () -> Void = { NSSound.beep() },
+        player: (any ExpiryAlarmPlaying)? = nil,
+        fallbackBeep: @escaping () -> Void = { NSSound.beep() },
         isAppActive: @escaping () -> Bool = { NSApplication.shared.isActive }
     ) {
-        self.beepAction = beep
+        self.player = player ?? AVAudioExpiryAlarmPlayer()
+        self.fallbackBeep = fallbackBeep
         self.isAppActiveProvider = isAppActive
         super.init()
     }
 
-    /// Whether the app is currently active (focused) — the model's decision
-    /// input at expiry: focused → straight to auto-end, unfocused → alarm.
     public var isAppActive: Bool { isAppActiveProvider() }
 
-    /// Starts the alarm (idempotent): immediate first beep, the repeating
-    /// ~1 s beep timer on the main run loop's `.common` mode, and the
-    /// focus-back observer. Deliver `onStateChange(true)` first so the
-    /// shake flag flips before the first beep.
     public func start() {
         guard !isAlarming else { return }
         isAlarming = true
         onStateChange?(true)
-        beepAction()
+        playAlarmPulse()
         NotificationCenter.default.addObserver(
             self, selector: #selector(handleDidBecomeActive),
             name: NSApplication.didBecomeActiveNotification, object: nil)
         let timer = Timer(timeInterval: Self.beepInterval, repeats: true) {
             [weak self] _ in
-            MainActor.assumeIsolated { self?.beepAction() }
+            MainActor.assumeIsolated { self?.playAlarmPulse() }
         }
         RunLoop.main.add(timer, forMode: .common)
         beepTimer = timer
     }
 
-    /// Stops the alarm (idempotent): the timer is invalidated (no further
-    /// beeps), the observer removed (no further focus-back deliveries) and
-    /// `onStateChange(false)` ends the shake flag.
     public func stop() {
         guard isAlarming else { return }
         isAlarming = false
@@ -141,13 +130,20 @@ public final class ExpiryAlarmController: NSObject {
             self, name: NSApplication.didBecomeActiveNotification, object: nil)
         beepTimer?.invalidate()
         beepTimer = nil
+        player.stop()
         onStateChange?(false)
     }
 
-    /// The focus-back event (selector-based observer — synchronous delivery
-    /// on the posting thread, which AppKit guarantees is main): stops the
-    /// alarm first, then reports the focus-back so the model's auto-end
-    /// runs with the alarm already down.
+    /// Internal deterministic cadence seam: tests trigger repeats directly,
+    /// avoiding sleeps and audio hardware.
+    func playAlarmPulse() {
+        do {
+            try player.play()
+        } catch {
+            fallbackBeep()
+        }
+    }
+
     @objc private func handleDidBecomeActive() {
         guard isAlarming else { return }
         stop()
@@ -155,9 +151,6 @@ public final class ExpiryAlarmController: NSObject {
     }
 
     deinit {
-        // Safety net only: the owner is @MainActor and deallocates on the
-        // main actor. A leaked armed alarm must not keep a run-loop timer
-        // or a notification observer alive (no runaway memory).
         beepTimer?.invalidate()
         beepTimer = nil
         NotificationCenter.default.removeObserver(self)

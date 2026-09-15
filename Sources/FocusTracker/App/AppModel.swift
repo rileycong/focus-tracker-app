@@ -140,7 +140,7 @@ import Observation
 ///   therefore within ~1 s of `remainingSeconds` hitting 0, the same
 ///   granularity as the countdown display itself.
 /// - **Expiry while UNFOCUSED → alarm:** the `ExpiryAlarmController` (the
-///   alarm's one AppKit seam — the system beep ~1×/s + the
+///   alarm's AppKit/AVFoundation seam — a media-output beep ~1×/s + the
 ///   `didBecomeActive` focus-back watch) starts beeping, and
 ///   `isExpiryAlarmActive` flips true — `TimerView` shakes while it is on.
 ///   The alarm loops bounded (one invalidated-on-stop timer, one observer,
@@ -183,10 +183,10 @@ import Observation
 ///   and will legitimately alarm/auto-end when it expires in-process. If
 ///   the user instead force-quits while the alarm runs, recovery handles
 ///   it unchanged on the next launch.
-/// - **Mini mode:** starting the alarm from mini restores the full timer
-///   (the shake is a full-window affordance; the alarm must be visible),
-///   reusing the existing same-window presentation sync. Compact mode itself
-///   never shakes (documented engineer's choice).
+/// - **Mini mode:** the compact timer remains visible and shakes for the
+///   full alarm duration. Focus-back stops sound + shake, then auto-end
+///   clears compact mode and restores the full window with the standard
+///   end-of-session modal.
 ///
 /// Issue #38 adds a model-owned manual-confirmation pause before the #22 end
 /// step. Opening End/Cancel pauses a running session immediately through the
@@ -281,7 +281,7 @@ public final class AppModel {
     /// The pinned autosave interval (seconds) handed to the
     /// `ActiveSessionCoordinator` (issue #13's cadence contract — also the
     /// honest-loss bound: a hard crash loses at most this much focused time).
-    public static let autosaveIntervalSeconds: TimeInterval = 30
+    public static let autosaveIntervalSeconds: TimeInterval = 1
 
     // MARK: - Nested types (the observable state contract)
 
@@ -634,7 +634,7 @@ public final class AppModel {
     /// Application Support; injected directory in tests).
     private let persistence: any ActiveSessionPersistence
     private let coordinator: ActiveSessionCoordinator
-    /// The #33 expiry alarm (its one AppKit seam — the system beep + the
+    /// The #33 expiry alarm (its AppKit/AVFoundation seam — media beep + the
     /// activation watch; injectable for tests). Constructed here when not
     /// injected; its callbacks are wired to the observable flag and the
     /// focus-back auto-end below.
@@ -793,6 +793,13 @@ public final class AppModel {
         }
         await reloadVault()
         await surfaceRecoveryIfSnapshotPresent()
+    }
+
+    /// Clean-termination hook used by `FocusTrackerAppDelegate`. This is
+    /// deliberately synchronous and best-effort: the snapshot is tiny and
+    /// local, failures never veto or defer application termination.
+    public func saveActiveSessionSnapshotForTermination() {
+        coordinator.saveSnapshotForTermination()
     }
 
     // MARK: - Vault state
@@ -2053,8 +2060,8 @@ public final class AppModel {
     ///    its own honest accumulators).
     /// 3. The decision (pinned): app ACTIVE → the alarm is pointless, go
     ///    straight to `autoEndExpiredSession()`; app UNFOCUSED → start the
-    ///    alarm (first restoring the full timer from mini mode — the shake
-    ///    is a full-window affordance) and wait for focus-back, which the
+    ///    alarm in the currently visible full or compact timer and wait for
+    ///    focus-back, which the
     ///    controller delivers via `onFocusBack` → auto-end.
     public func evaluateSessionExpiry() {
         guard expiryWatchState == .watching else { return }
@@ -2074,8 +2081,8 @@ public final class AppModel {
             // the auto-end + modal.
             autoEndExpiredSession()
         } else {
-            // Expiry while unfocused: alarm until the user focuses back.
-            if isMiniTimerActive { restoreFromMiniTimer() }
+            // Expiry while unfocused: alarm in the currently visible full or
+            // compact timer until the user focuses back.
             alarmPurpose = .session
             expiryAlarm.start()
         }

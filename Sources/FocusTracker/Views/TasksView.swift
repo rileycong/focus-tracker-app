@@ -8,6 +8,7 @@ import UniformTypeIdentifiers
 /// banner, loaded), and `AppModel.tasks` is mirrored into the
 /// `TasksViewModel` whose sections/selection the list renders.
 struct TasksView: View {
+    static let completionNoticeDuration: Duration = .seconds(3)
     private let model: AppModel
     @State private var viewModel: TasksViewModel
     /// The #16 form presentation: nil = closed; non-nil shows the sheet
@@ -186,7 +187,7 @@ struct TasksView: View {
         // the toolbar-bearing view's structure is identical with or without
         // the banner — exactly one toolbar instance at all times. Banner
         // behavior (transient auto-expiry, manual ✕ dismiss) is unchanged;
-        // the 10 s timing here is #39's to change.
+        // the 3 s timing is pinned by #39.
         .safeAreaInset(edge: .top, spacing: 0) {
             if let notice = model.completionNotice {
                 completionNoticeBanner(notice)
@@ -288,7 +289,7 @@ struct TasksView: View {
         .clipShape(RoundedRectangle(cornerRadius: DesignTokens.panelCornerRadius))
         .task(id: notice) {
             do {
-                try await Task.sleep(for: .seconds(10))
+                try await Task.sleep(for: Self.completionNoticeDuration)
             } catch {
                 return
             }

@@ -62,12 +62,10 @@ import SwiftUI
 /// # Expiry watch (issue #33)
 /// This view runs the same ~1 s `evaluateSessionExpiry()` watch loop as the
 /// full timer (see its type documentation), so mini mode is covered for the
-/// expiry alarm/auto-end: while collapsed this compact window is the visible surface,
-/// and an expiry while unfocused starts the alarm — which restores the FULL
-/// timer (the model's `restoreFromMiniTimer()` on the alarm path) so the
-/// pinned shake is actually visible. The mini view itself deliberately
-/// never shakes (engineer's choice, documented) — beeps plus the restored
-/// shaking full window are the alarm's surface here.
+/// expiry alarm/auto-end. While collapsed, unfocused expiry keeps this compact
+/// surface visible and visibly shaking for the same duration as the audible
+/// alarm. Focus-back stops both, then restores full presentation through the
+/// standard auto-end modal path.
 ///
 /// # Ring color RED (issue #35): n/a by pinned design — documented
 /// The mini deliberately shows **no ring** (pinned PRD §11 content: title,
@@ -100,6 +98,7 @@ struct MiniTimerView: View {
         // Fill the resizable compact window (issue #28) instead of pinning the #21
         // fixed frame; content centers in the larger card at big sizes.
         .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .expiryAlarmShake(isActive: model.isExpiryAlarmActive)
         .background(containerSizeProbe)
         .background(miniBackground)
         .confirmationDialog(
@@ -122,9 +121,8 @@ struct MiniTimerView: View {
             // The #33 expiry watch (issue #33): the same ~1 s idempotent
             // loop the full `TimerView` runs, so mini mode is covered too —
             // the compact main window is the visible surface while collapsed,
-            // and expiry while unfocused
-            // starts the alarm (which restores the full timer so the shake
-            // is actually visible). Fully guarded — no-ops unless an
+            // and expiry while unfocused starts its beep + shake. Fully
+            // guarded — no-ops unless an
             // unhandled expiry is pending on a live session.
             while !Task.isCancelled {
                 try? await Task.sleep(for: .seconds(1))

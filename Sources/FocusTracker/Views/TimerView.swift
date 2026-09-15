@@ -82,8 +82,8 @@ import SwiftUI
 ///
 /// # Expiry alarm + shake (issue #33, PRD §9.5)
 /// When the app is UNFOCUSED at expiry the model starts the in-app alarm
-/// (`AppModel.isExpiryAlarmActive` — repeated system beeps ~1×/s inside the
-/// `ExpiryAlarmController`, the alarm's one AppKit seam) and this view
+/// (`AppModel.isExpiryAlarmActive` — repeated media-output beeps ~1×/s inside the
+/// `ExpiryAlarmController`, the alarm's AppKit/AVFoundation seam) and this view
 /// shakes the timer layout: a small horizontal wobble (`shakeAmplitude`,
 /// deliberately subtle within the dark-calm language — the ring, count and
 /// controls stay put visually; nothing flashes or screams). The shake is
@@ -108,13 +108,6 @@ struct TimerView: View {
     /// `dailyLogStore`) every layer uses.
     let model: AppModel
 
-    /// The shake offset while the #33 expiry alarm is active (see the type
-    /// documentation): 0 at rest, `shakeAmplitude` at the wobble's edge.
-    @State private var shakeOffset: CGFloat = 0
-    /// The shake amplitude (issue #33): deliberately small — an attention
-    /// wobble, not a seizure (the dark-calm language, PRD §21).
-    private static let shakeAmplitude: CGFloat = 4
-
     @State private var showsEndConfirmation = false
 
     var body: some View {
@@ -137,23 +130,7 @@ struct TimerView: View {
                 controls
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
-            // Issue #33: the shake rides the observable alarm flag — a
-            // repeating ease wobble while alarming, a quick settle on stop
-            // (the auto-end that follows focus-back). Applied to the whole
-            // layout so the ring, countdown and controls wobble together;
-            // subtle amplitude, no color/flash changes (dark-calm, §21).
-            .offset(x: shakeOffset)
-            .onChange(of: model.isExpiryAlarmActive) { _, alarming in
-                if alarming {
-                    withAnimation(
-                        .easeInOut(duration: 0.09).repeatForever(autoreverses: true)
-                    ) {
-                        shakeOffset = Self.shakeAmplitude
-                    }
-                } else {
-                    withAnimation(.easeInOut(duration: 0.2)) { shakeOffset = 0 }
-                }
-            }
+            .expiryAlarmShake(isActive: model.isExpiryAlarmActive)
         }
         .background(DesignTokens.background)
         .confirmationDialog(

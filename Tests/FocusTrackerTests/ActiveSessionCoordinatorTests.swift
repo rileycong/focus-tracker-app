@@ -162,7 +162,7 @@ final class ActiveSessionCoordinatorTests: XCTestCase {
 
     private func makeCoordinator(
         spy: SpyPersistence, scheduler: ManualTickScheduler,
-        autosaveInterval: TimeInterval = 30, clock: FakeClock = FakeClock()
+        autosaveInterval: TimeInterval = 1, clock: FakeClock = FakeClock()
     ) -> ActiveSessionCoordinator {
         ActiveSessionCoordinator(
             engine: FocusSessionEngine(clock: clock),
@@ -260,7 +260,7 @@ final class ActiveSessionCoordinatorTests: XCTestCase {
         try coordinator.restore(from: snapshot)
 
         XCTAssertTrue(coordinator.isActive)
-        XCTAssertEqual(scheduler.pendingInterval, 30, "autosave re-armed after restore")
+        XCTAssertEqual(scheduler.pendingInterval, 1, "production cadence re-armed after restore")
 
         scheduler.firePendingTick()
         XCTAssertEqual(spy.savedSnapshots.count, 1)
@@ -306,7 +306,7 @@ final class ActiveSessionCoordinatorTests: XCTestCase {
         // The engine transition stands (documented error policy); the caller
         // knows the snapshot is stale and the tick chain still retries.
         XCTAssertTrue(coordinator.isActive)
-        XCTAssertEqual(scheduler.pendingInterval, 30)
+        XCTAssertEqual(scheduler.pendingInterval, 1)
     }
 
     func testEndClearFailureSurfacesViaCallbackAndResultIsStillReturned() throws {

@@ -53,6 +53,13 @@ final class AppModelExpiryAlarmTests: XCTestCase {
         var count = 0
     }
 
+    private final class CountingPlayer: ExpiryAlarmPlaying {
+        let counter: BeepCounter
+        init(counter: BeepCounter) { self.counter = counter }
+        func play() throws { counter.count += 1 }
+        func stop() {}
+    }
+
     private struct TestFailure: Error {}
 
     // MARK: - Fixture access
@@ -103,7 +110,7 @@ final class AppModelExpiryAlarmTests: XCTestCase {
         let probe = focusProbe!
         let counter = beeps!
         let alarm = ExpiryAlarmController(
-            beep: { counter.count += 1 },
+            player: CountingPlayer(counter: counter),
             isAppActive: { probe.isActive })
         let model = AppModel(
             settings: settings, persistenceDirectory: persistenceDirectory,
@@ -222,6 +229,10 @@ final class AppModelExpiryAlarmTests: XCTestCase {
         model.evaluateSessionExpiry()
 
         XCTAssertTrue(model.isExpiryAlarmActive, "expired + unfocused → alarm")
+        XCTAssertEqual(
+            ExpiryAlarmShakeEffect.targetOffset(isActive: model.isExpiryAlarmActive),
+            ExpiryAlarmShakeEffect.amplitude,
+            "the full timer's shared shake state is active")
         XCTAssertEqual(beeps.count, 1, "the alarm's first beep is immediate")
         XCTAssertEqual(model.appPhase, .timerView(context), "no modal yet")
         XCTAssertEqual(model.sessionState, .running, "not auto-ended yet")
@@ -529,7 +540,7 @@ final class AppModelExpiryAlarmTests: XCTestCase {
 
     // MARK: - Mini mode
 
-    func testAlarmFromMiniModeRestoresFullTimer() async throws {
+    func testAlarmFromMiniModeKeepsMiniVisibleAndShakingUntilFocusBack() async throws {
         let taskID = UUID()
         try writeTaskFile("Deep Work", id: taskID, in: vaultURL)
         let model = await makeConfiguredModel()
@@ -541,9 +552,22 @@ final class AppModelExpiryAlarmTests: XCTestCase {
         model.evaluateSessionExpiry()
 
         XCTAssertTrue(model.isExpiryAlarmActive, "unfocused expiry → alarm")
-        XCTAssertFalse(
-            model.isMiniTimerActive,
-            "the alarm restores the full timer — the shake is a full-window affordance")
+        XCTAssertTrue(model.isMiniTimerActive, "compact surface remains visible while alarming")
+        XCTAssertEqual(
+            ExpiryAlarmShakeEffect.targetOffset(isActive: model.isExpiryAlarmActive),
+            ExpiryAlarmShakeEffect.amplitude,
+            "the mini and full views share this active shake state")
         XCTAssertEqual(beeps.count, 1)
+
+        focusProbe.isActive = true
+        focusBack()
+
+        XCTAssertFalse(model.isExpiryAlarmActive, "focus-back clears beep + shake state")
+        XCTAssertFalse(model.isMiniTimerActive, "auto-end restores normal/full presentation")
+        XCTAssertEqual(ExpiryAlarmShakeEffect.targetOffset(isActive: false), 0)
+        guard case .endingSession = model.appPhase else {
+            XCTFail("focus-back must open the standard auto-end modal phase")
+            return
+        }
     }
 }
