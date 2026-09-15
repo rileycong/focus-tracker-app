@@ -7,7 +7,8 @@ private typealias SessionStartRefusal = AppModel.SessionStartRefusal
 /// Tests for the #19 session-start picker's pure logic (issue #19 "pure
 /// picker-filtering logic" criterion — no SwiftUI, no I/O, same spirit as
 /// `TasksGroupingTests`): eligibility (NOT Blocked/Dropped/Done — the #9
-/// planning-eligible rule, per-node), the any-depth subtask flattening, the
+/// planning-eligible rule — plus the #41 ancestor rule: no Done/Dropped/
+/// Blocked ancestor), the any-depth subtask flattening, the
 /// tasks-view-like grouping (project sections sorted, No Project last,
 /// status sub-groups in the pinned order), the search filter, and the
 /// sheet's two pure helpers (duration parsing, refusal copy).
@@ -21,6 +22,8 @@ final class SessionStartPickerTests: XCTestCase {
     private static let s1 = UUID()
     private static let s2 = UUID()
     private static let s3 = UUID()
+    private static let s4 = UUID()
+    private static let s5 = UUID()
     private static let deep = UUID()
 
     private static let work = Project(name: "Work")
@@ -145,20 +148,141 @@ final class SessionStartPickerTests: XCTestCase {
             ["Parent", "Child", "Grandchild"])
     }
 
-    func testSubtaskEligibilityIsByOwnStatusOnly() {
-        // A To Do subtask under a Done parent is still eligible (#9's pinned
-        // per-node state rule; well-formed vaults can't produce this, but
-        // externally authored files can) — and the In-Progress parent in the
-        // second tree is itself a target while its Dropped child is not.
+    func testSubtaskEligibilityUnderEligibleParentsUnchanged() {
+        // The own-status half of the rule: an In-Progress parent is itself
+        // a target while its Dropped child is not (#9), and active parents
+        // (To Do, In Progress) never hide an eligible child (#41).
         let targets = SessionStartPicker.eligibleTargets(in: [
+            task(Self.a, status: .inProgress, subtasks: [
+                subtask(Self.s1, status: .dropped),
+            ]),
+            task(Self.b, status: .toDo, subtasks: [
+                subtask(Self.s2, status: .toDo),
+            ]),
+        ])
+        XCTAssertEqual(ids(targets), [Self.a, Self.b, Self.s2])
+    }
+
+    // MARK: - Eligibility: the #41 ancestor rule (no invisible-but-pickable)
+
+    func testSubtaskUnderDoneAncestorIsExcluded() {
+        // The user's repro (issue #41): PRD §12.1 allows marking a parent
+        // Done while its subtasks are still active — the Tasks view hides
+        // the Done parent (§8.3), so the picker must not offer the
+        // pickable-but-invisible subtasks either.
+        let targets = SessionStartPicker.eligibleTargets(in: [
+            task(Self.a, status: .done, subtasks: [
+                subtask(Self.s1, status: .inProgress),
+                subtask(Self.s2, status: .toDo),
+            ]),
+        ])
+        XCTAssertTrue(targets.isEmpty, "a Done ancestor hides its whole branch")
+    }
+
+    func testSubtaskUnderBlockedAncestorIsExcluded() {
+        let targets = SessionStartPicker.eligibleTargets(in: [
+            task(Self.a, status: .blocked, subtasks: [
+                subtask(Self.s1, status: .toDo),
+            ]),
+        ])
+        XCTAssertTrue(targets.isEmpty, "a Blocked ancestor hides its whole branch")
+    }
+
+    func testSubtaskUnderDroppedAncestorIsExcluded() {
+        let targets = SessionStartPicker.eligibleTargets(in: [
+            task(Self.a, status: .dropped, subtasks: [
+                subtask(Self.s1, status: .inProgress),
+            ]),
+        ])
+        XCTAssertTrue(targets.isEmpty, "a Dropped ancestor hides its whole branch")
+    }
+
+    func testHiddenAncestorDeepInChainHidesOnlyItsBranch() {
+        // Mixed chains (#41): under one To Do task, a Blocked mid-level
+        // subtask hides its own subtree while an In-Progress sibling keeps
+        // its eligible child; a Done mid-level subtask likewise.
+        let targets = SessionStartPicker.eligibleTargets(in: [
+            task(Self.a, status: .toDo, subtasks: [
+                subtask(Self.s1, status: .blocked, children: [
+                    subtask(Self.deep, status: .toDo),
+                ]),
+                subtask(Self.s2, status: .inProgress, children: [
+                    subtask(Self.s3, status: .toDo),
+                ]),
+                subtask(Self.s4, status: .done, children: [
+                    subtask(Self.s5, status: .toDo),
+                ]),
+            ]),
+        ])
+        XCTAssertEqual(
+            ids(targets), [Self.a, Self.s2, Self.s3],
+            "the Blocked and Done branches are hidden at every depth; the active branches are not")
+    }
+
+    func testEligibilityMatrixOverOwnAndAncestorStatuses() {
+        let statuses: [TaskStatus] = [.toDo, .inProgress, .blocked, .dropped, .done]
+        for own in statuses {
+            // Root rule unchanged (#9): no ancestors → own status only.
+            XCTAssertEqual(
+                SessionStartPicker.isEligible(own, ancestorStatuses: []),
+                own.isPlanningEligible,
+                "root \(own.rawValue) keeps the #9 per-node rule")
+            for ancestor in statuses {
+                let ancestorTransparent =
+                    ancestor == .toDo || ancestor == .inProgress
+                XCTAssertEqual(
+                    SessionStartPicker.isEligible(
+                        own, ancestorStatuses: [ancestor]),
+                    own.isPlanningEligible && ancestorTransparent,
+                    "own \(own.rawValue) under \(ancestor.rawValue) ancestor")
+                // Mixed chains behave like their worst ancestor: one
+                // hiding ancestor among transparent ones hides the node.
+                XCTAssertEqual(
+                    SessionStartPicker.isEligible(
+                        own, ancestorStatuses: [.toDo, .inProgress, ancestor]),
+                    own.isPlanningEligible && ancestorTransparent,
+                    "own \(own.rawValue) in a chain with \(ancestor.rawValue) ancestor")
+            }
+        }
+    }
+
+    func testPreselectionClearedForTargetUnderHiddenAncestor() {
+        // #34's rule with the #41 eligibility: a previous target that
+        // became invisible (its ancestor is Done/Blocked) pre-selects
+        // nothing; eligible siblings still pre-select.
+        let tasks = [
             task(Self.a, status: .done, subtasks: [
                 subtask(Self.s1, status: .toDo),
             ]),
-            task(Self.b, status: .inProgress, subtasks: [
-                subtask(Self.s2, status: .dropped),
+            task(Self.b, status: .toDo, subtasks: [
+                subtask(Self.s2, status: .blocked, children: [
+                    subtask(Self.s3, status: .toDo),
+                ]),
             ]),
+        ]
+        XCTAssertNil(
+            SessionStartPicker.preselectedTargetID(requesting: Self.s1, in: tasks),
+            "under a Done parent → no pre-selection (#41)")
+        XCTAssertNil(
+            SessionStartPicker.preselectedTargetID(requesting: Self.s3, in: tasks),
+            "under a Blocked ancestor → no pre-selection (#41)")
+        XCTAssertEqual(
+            SessionStartPicker.preselectedTargetID(requesting: Self.b, in: tasks),
+            Self.b, "an eligible task still pre-selects")
+    }
+
+    func testPickerSectionsExcludeSubtasksUnderHiddenParents() {
+        // The grouped picker structure — the rendering input — never
+        // carries a target under a hidden parent, in any section or group.
+        let sections = SessionStartPicker.sections(in: [
+            task(Self.a, project: Self.work, status: .done, subtasks: [
+                subtask(Self.s1, title: "Set up Tailwind"),
+            ]),
+            task(Self.b, project: Self.work),
         ])
-        XCTAssertEqual(ids(targets), [Self.s1, Self.b])
+        XCTAssertEqual(sections.map(\.displayName), ["Work"])
+        let rendered = sections.flatMap { $0.groups.flatMap(\.targets) }
+        XCTAssertEqual(ids(rendered), [Self.b], "the Done parent and its active subtask are absent")
     }
 
     func testSubtaskTargetsInheritParentProjectAndCategories() {

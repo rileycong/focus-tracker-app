@@ -178,7 +178,10 @@ struct SessionStartView: View {
                     systemImage: "tray",
                     description: Text(
                         "To Do or In Progress tasks and subtasks can be started. "
-                            + "Create an ad-hoc task instead."))
+                            + "Subtasks under a Done, Dropped or Blocked parent are "
+                            + "hidden — reveal the parent in the Tasks view with "
+                            + "“Show completed/dropped”. Or create an ad-hoc task "
+                            + "instead."))
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
             } else {
                 ScrollView {

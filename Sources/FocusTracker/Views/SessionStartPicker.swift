@@ -17,8 +17,9 @@ public struct SessionStartTarget: Identifiable, Equatable, Sendable {
     public let parentTaskID: UUID
     /// The target's own title.
     public let title: String
-    /// The target's own status — the sole eligibility input (#9's
-    /// planning-eligible state rule is per-node; see `SessionStartPicker`).
+    /// The target's own status — one eligibility input (#9's planning-
+    /// eligible state rule is per-node; #41 adds the ancestor rule, see
+    /// `SessionStartPicker`).
     public let status: TaskStatus
     /// The effective project (PRD §5.4: subtasks inherit from the parent
     /// task; a task carries its own). Drives the section grouping.
@@ -74,16 +75,24 @@ public struct SessionStartSection: Identifiable, Equatable, Sendable {
 /// from the mutable `TasksViewModel` (the #19 criterion pins this), so it
 /// cannot drift with the tasks view's Done/Dropped filter or collapse state.
 ///
-/// **Eligibility (pinned, #9):** a node is eligible exactly when its own
-/// status is `To Do` or `In Progress` — `StatusTransition
+/// **Eligibility (pinned, #9 + #41):** a node is eligible exactly when its
+/// own status is `To Do` or `In Progress` — `StatusTransition
 /// .isPlanningEligible` reused verbatim, which encodes NOT `Blocked`, NOT
 /// `Dropped`, and `Done` excluded (the #9 `startSession` refusals
-/// `.blocked`/`.dropped`/`.alreadyDone` would refuse the other three).
-/// Exclusion is by the node's own status only: whether an ineligible
-/// ancestor hides its descendants is a Lifebot filtering decision, pinned
-/// out of scope on `StatusTransition.planningEligibleIDs(in:)` — the picker
-/// follows the same rule (in a well-formed vault a Done parent's children
-/// are all Done anyway, because #3's completion bubbles up).
+/// `.blocked`/`.dropped`/`.alreadyDone` would refuse the other three) —
+/// AND no ancestor is `Done`, `Dropped` or `Blocked` (issue #41). The
+/// ancestor rule exists because PRD §12.1 legitimately allows marking a
+/// parent Done while its subtasks are still active (an externally authored
+/// file state; #3's in-app completion bubble-up can't produce it), and the
+/// Tasks view hides Done/Dropped parents by default (§8.3) — so a
+/// per-node-only rule offered subtasks the Tasks view never shows:
+/// pickable-but-invisible inventory (the user-reported bug). The rule lives
+/// here rather than on `StatusTransition.planningEligibleIDs(in:)`, whose
+/// documentation pins ancestor exclusion out of scope there (a Lifebot
+/// filtering decision) — the picker's inventory contract is deliberately
+/// the stricter one. `preselectedTargetID(requesting:in:)` (#34) composes
+/// this same rule. Active ancestors (`To Do`/`In Progress`) stay
+/// transparent.
 ///
 /// **Grouping (pinned shape, #19):** project sections sorted by name with
 /// No Project pinned last, and status sub-groups in the pinned order To Do →
@@ -106,16 +115,27 @@ public enum SessionStartPicker {
     /// tasks-view pinned order's eligible subset).
     public static let eligibleStatuses: [TaskStatus] = [.toDo, .inProgress]
 
-    /// Whether a node in this status may start a session (#9: the
-    /// planning-eligible state rule, reused verbatim).
-    public static func isEligible(_ status: TaskStatus) -> Bool {
-        status.isPlanningEligible
+    /// Whether a node in this status may start a session given its
+    /// ancestors' statuses (#9 + #41): the node's own status is planning-
+    /// eligible AND no ancestor is `Done`, `Dropped` or `Blocked` — active
+    /// ancestors (`To Do`/`In Progress`) are transparent. Root nodes pass
+    /// `[]` (the ancestor list is empty), so the root rule is the #9
+    /// per-node rule unchanged.
+    public static func isEligible(
+        _ status: TaskStatus, ancestorStatuses: [TaskStatus] = []
+    ) -> Bool {
+        guard status.isPlanningEligible else { return false }
+        return ancestorStatuses.allSatisfy { ancestor in
+            ancestor != .done && ancestor != .dropped && ancestor != .blocked
+        }
     }
 
     /// Flattens every eligible target out of the inventory, in
     /// inventory/tree order: tasks in filename-sorted order, each followed
     /// by its eligible subtasks depth-first (a subtask inherits the parent
-    /// task's project/categories per PRD §5.4).
+    /// task's project/categories per PRD §5.4). Eligibility is the #9+#41
+    /// rule (`isEligible(_:ancestorStatuses:)`), so a subtask under a Done/
+    /// Dropped/Blocked ancestor is never offered.
     public static func eligibleTargets(in tasks: [TaskItem]) -> [SessionStartTarget] {
         var targets: [SessionStartTarget] = []
         for task in tasks {
@@ -128,7 +148,7 @@ public enum SessionStartPicker {
             }
             collectEligible(
                 in: task.subtasks, parentTask: task, path: [task.title],
-                into: &targets)
+                ancestorStatuses: [task.status], into: &targets)
         }
         return targets
     }
@@ -175,8 +195,10 @@ public enum SessionStartPicker {
     /// The effective picker pre-selection (issue #34): `requestedID` when
     /// it is planning-eligible in the given inventory, else nil. The
     /// session-start sheet applies it on appear, so a Done, Blocked or
-    /// Dropped previous task — or an ID no longer in the inventory —
-    /// simply leaves the picker unselected (the current #19 behavior).
+    /// Dropped previous task — one under a Done/Blocked/Dropped ancestor
+    /// (issue #41, the same rule `eligibleTargets(in:)` applies, composed
+    /// here) — or an ID no longer in the inventory simply leaves the picker
+    /// unselected (the current #19 behavior).
     /// Pure so the eligibility rule is unit-testable like the grouping
     /// (#19) and its callers (the sheet and the tests) cannot drift.
     public static func preselectedTargetID(
@@ -192,14 +214,16 @@ public enum SessionStartPicker {
     // MARK: - Internals
 
     /// Depth-first walk of one sibling list; `path` is the title chain from
-    /// the owning task down to (not including) the candidate.
+    /// the owning task down to (not including) the candidate, and
+    /// `ancestorStatuses` is the matching status chain (owning task down to
+    /// the candidate's parent) — the #41 ancestor eligibility input.
     private static func collectEligible(
         in subtasks: [SubtaskItem], parentTask: TaskItem, path: [String],
-        into targets: inout [SessionStartTarget]
+        ancestorStatuses: [TaskStatus], into targets: inout [SessionStartTarget]
     ) {
         for subtask in subtasks {
             let targetPath = path + [subtask.title]
-            if isEligible(subtask.status) {
+            if isEligible(subtask.status, ancestorStatuses: ancestorStatuses) {
                 targets.append(
                     SessionStartTarget(
                         id: subtask.id, parentTaskID: parentTask.id,
@@ -209,6 +233,7 @@ public enum SessionStartPicker {
             }
             collectEligible(
                 in: subtask.children, parentTask: parentTask, path: targetPath,
+                ancestorStatuses: ancestorStatuses + [subtask.status],
                 into: &targets)
         }
     }

@@ -159,6 +159,41 @@ final class TasksGroupingTests: XCTestCase {
         XCTAssertEqual(sections[0].groups[3].tasks.map(\.id), [Self.a])
     }
 
+    func testFilterOnRevealedDoneParentCarriesActiveSubtasksForRendering() {
+        // Issue #41's user repro: a §12.1-legitimate parent marked Done
+        // while its subtasks are still To Do / In Progress. The Tasks view
+        // hides the parent with the filter off (§8.3); with the filter on,
+        // the revealed Done-group row must render the whole tree. The
+        // grouping keeps the full TaskItem — subtasks intact, unfiltered by
+        // status — and TaskRowView/SubtaskRowView render every child row
+        // unconditionally, so the active subtasks are visible (expanded)
+        // under the revealed Done parent. This test pins the grouping half:
+        // if a status filter ever crept into the subtree here, the
+        // pickable-but-invisible confusion would reappear in the Tasks view.
+        let doneParent = try! TaskItem(
+            id: Self.a,
+            title: "Set up the OpenCode remote control",
+            categories: [Category(name: "Build")],
+            status: .done,
+            subtasks: [
+                SubtaskItem(
+                    id: UUID(), title: "Set up a VPS with Hostinger",
+                    status: .inProgress),
+                SubtaskItem(id: UUID(), title: "Set up Tailwind", status: .toDo),
+            ])
+        let sections = TasksGrouping.sections(tasks: [doneParent], showCompleted: true)
+        XCTAssertEqual(sections.count, 1)
+        XCTAssertEqual(sections[0].groups[3].status, .done)
+        let revealed = try! XCTUnwrap(sections[0].groups[3].tasks.first)
+        XCTAssertEqual(revealed.id, Self.a)
+        XCTAssertEqual(
+            revealed.subtasks.map(\.status), [.inProgress, .toDo],
+            "the revealed Done parent keeps its active subtasks — the rows render them")
+        // Filter off: the parent and its whole tree stay hidden.
+        XCTAssertEqual(
+            TasksGrouping.sections(tasks: [doneParent], showCompleted: false), [])
+    }
+
     func testNoProjectSectionAlsoAbsentWhenOnlyCompletedUnprojectedTasksAndFilterOff() {
         let sections = TasksGrouping.sections(
             tasks: [task(Self.a, status: .done)], showCompleted: false)
