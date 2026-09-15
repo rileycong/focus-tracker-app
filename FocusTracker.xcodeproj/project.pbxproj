@@ -20,7 +20,6 @@
 		2C75A6F305AE89450722FF81 /* DeadlineDay.swift in Sources */ = {isa = PBXBuildFile; fileRef = DAA99F75D6C0662182DA03AB /* DeadlineDay.swift */; };
 		2DFDCAEC4929F9FA4D63E5AA /* TimerView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4404083D41F195CEF70D0FD1 /* TimerView.swift */; };
 		2E5C41BE3B9D53099472C195 /* AppModelReorderTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 681606B16406FD9CC58C5181 /* AppModelReorderTests.swift */; };
-		2F61C905039BEBA16715711A /* MiniTimerPanelController.swift in Sources */ = {isa = PBXBuildFile; fileRef = D335BCE52B9EEF442F53641B /* MiniTimerPanelController.swift */; };
 		32B8B1F2B438D38E619C2B2E /* TimerDisplay.swift in Sources */ = {isa = PBXBuildFile; fileRef = 97B40F0E34CCC987921482F9 /* TimerDisplay.swift */; };
 		335FFAE1E20D5816ACF0D335 /* FrontmatterSplitter.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9E370EA1340964AFF7C24132 /* FrontmatterSplitter.swift */; };
 		33EA16E6F3F141BC8EC0638C /* RecoveryPromptView.swift in Sources */ = {isa = PBXBuildFile; fileRef = C6747EB283EE544FF7E71320 /* RecoveryPromptView.swift */; };
@@ -36,7 +35,6 @@
 		4866585A7AACB6576688B9BF /* TaskOrderingTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 95709B12E9BA98C14EF8CEAB /* TaskOrderingTests.swift */; };
 		4A31461E0538DB93A092BA40 /* VaultStructureValidatorTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 64C87806167E963A7D11D916 /* VaultStructureValidatorTests.swift */; };
 		4A6D67334A0E9AC55CBF51E8 /* EndOfSessionFormState.swift in Sources */ = {isa = PBXBuildFile; fileRef = BD9179D2909498220C214EE0 /* EndOfSessionFormState.swift */; };
-		4C28161E12A283C0F7DF33E6 /* AppModelMiniTimerEpochTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5FEA6A7576E048D889E55C19 /* AppModelMiniTimerEpochTests.swift */; };
 		4C3F15EB47BC04AF06081091 /* DesignTokensTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = E6F8074A2B67FDEFE43EB311 /* DesignTokensTests.swift */; };
 		4CA8116552D030F08BFE1FC9 /* TimerDisplayTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = DD420083F379F54961F244ED /* TimerDisplayTests.swift */; };
 		4CE0485DD586E39C8634CEB9 /* MiniTimerView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 33016951FE75D4AE77E4F634 /* MiniTimerView.swift */; };
@@ -108,10 +106,10 @@
 		D43785B11EF28B129E4419A6 /* SystemTickScheduler.swift in Sources */ = {isa = PBXBuildFile; fileRef = 52A6B2C67AE475FD9E4BC82F /* SystemTickScheduler.swift */; };
 		D48CA988670FBA3F970806BA /* ActiveSessionRecoveryTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 03FB6108495185556CD5DC37 /* ActiveSessionRecoveryTests.swift */; };
 		DA1D15E6EE8197B0A143628B /* BreakTimerEngineTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 826D4C1D1D0E473A710B58A5 /* BreakTimerEngineTests.swift */; };
+		DACFF49145A5719B90D7DEAD /* MainWindowPresentationController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 11E28A78C958D9C4613DBDB2 /* MainWindowPresentationController.swift */; };
 		DCDFB50E7152BF60B08454D3 /* DailyLogCodec.swift in Sources */ = {isa = PBXBuildFile; fileRef = CD099DA3072484B67CFDD3A0 /* DailyLogCodec.swift */; };
 		DD3059D76B8BCB53D62C954E /* ExpiryAlarmController.swift in Sources */ = {isa = PBXBuildFile; fileRef = FB7CA3AD42DF0E4FD3808B5D /* ExpiryAlarmController.swift */; };
 		DF5EA0555990FD6FC645C434 /* VaultStoreTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 28BA6F82E572C982197E1959 /* VaultStoreTests.swift */; };
-		F26F35B5CC011F3FDC276B82 /* AutoCollapseDemo.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4E687188E43D05170E11C259 /* AutoCollapseDemo.swift */; };
 		F8D548D3A1E6FE56E6A38A7C /* ActiveSessionRecovery.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6B9823987C7DB9B22004C48A /* ActiveSessionRecovery.swift */; };
 		F9A45B20373B4F1164258AE6 /* ActiveSessionPersistenceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AF4D3CFB0FB6AD76903E3A3E /* ActiveSessionPersistenceTests.swift */; };
 		FA85D7377CBF918F7941F4ED /* ActiveSessionPersistence.swift in Sources */ = {isa = PBXBuildFile; fileRef = 173E587312DA52F8A9B8EA05 /* ActiveSessionPersistence.swift */; };
@@ -138,6 +136,7 @@
 		08EFA1B0F2ECE21BD65D1D71 /* VaultStoreSubtaskTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VaultStoreSubtaskTests.swift; sourceTree = "<group>"; };
 		093E010238901B4A8C04AF3A /* ExpiryAlarmControllerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ExpiryAlarmControllerTests.swift; sourceTree = "<group>"; };
 		09F3B221E5E24A84E3AD2F8D /* FormDeadline.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FormDeadline.swift; sourceTree = "<group>"; };
+		11E28A78C958D9C4613DBDB2 /* MainWindowPresentationController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MainWindowPresentationController.swift; sourceTree = "<group>"; };
 		153E5F405F7D2FAABE248A56 /* BreakView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BreakView.swift; sourceTree = "<group>"; };
 		15686F80AD41E2A1D4F5639B /* SubtaskFormState.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SubtaskFormState.swift; sourceTree = "<group>"; };
 		173E587312DA52F8A9B8EA05 /* ActiveSessionPersistence.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ActiveSessionPersistence.swift; sourceTree = "<group>"; };
@@ -166,14 +165,12 @@
 		449D8FADD940BEE8778B592B /* DailyLogDay.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DailyLogDay.swift; sourceTree = "<group>"; };
 		496B467448E0EBB4F9699080 /* FrontmatterEncoder.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FrontmatterEncoder.swift; sourceTree = "<group>"; };
 		4D5486D7E5950BEA4B04343F /* FrontmatterCodecTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FrontmatterCodecTests.swift; sourceTree = "<group>"; };
-		4E687188E43D05170E11C259 /* AutoCollapseDemo.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AutoCollapseDemo.swift; sourceTree = "<group>"; };
 		50426A6786DDC31102CF1E2C /* SessionStartView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SessionStartView.swift; sourceTree = "<group>"; };
 		52A6B2C67AE475FD9E4BC82F /* SystemTickScheduler.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SystemTickScheduler.swift; sourceTree = "<group>"; };
 		554340F5DF6E15C777FD9264 /* CollapseStateStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CollapseStateStore.swift; sourceTree = "<group>"; };
 		556B8ABC78BC23CE6B95A6C6 /* AppModelTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppModelTests.swift; sourceTree = "<group>"; };
 		5A91EAC12B02FAB3678FCD99 /* SessionStartPicker.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SessionStartPicker.swift; sourceTree = "<group>"; };
 		5F0BA521BD58A62A830A1C10 /* StatusTransition.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StatusTransition.swift; sourceTree = "<group>"; };
-		5FEA6A7576E048D889E55C19 /* AppModelMiniTimerEpochTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppModelMiniTimerEpochTests.swift; sourceTree = "<group>"; };
 		608FD7031D7A36234F5A9C7B /* TaskRowView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TaskRowView.swift; sourceTree = "<group>"; };
 		612FA419C07278972E2B1A86 /* AppModelBreakTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppModelBreakTests.swift; sourceTree = "<group>"; };
 		64C87806167E963A7D11D916 /* VaultStructureValidatorTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VaultStructureValidatorTests.swift; sourceTree = "<group>"; };
@@ -224,7 +221,6 @@
 		CF0567BC0B0379E14C94219B /* VaultStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VaultStore.swift; sourceTree = "<group>"; };
 		D036D116F19393559D30A4C1 /* ActiveSessionCoordinator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ActiveSessionCoordinator.swift; sourceTree = "<group>"; };
 		D3324705D893E9D8CD363C49 /* ActiveSessionSnapshot.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ActiveSessionSnapshot.swift; sourceTree = "<group>"; };
-		D335BCE52B9EEF442F53641B /* MiniTimerPanelController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MiniTimerPanelController.swift; sourceTree = "<group>"; };
 		D661E8DE9DDA5E5D7B4F8D45 /* AppModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppModel.swift; sourceTree = "<group>"; };
 		DA111D2587D7B0D7C3C5C401 /* ActiveSessionSnapshotTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ActiveSessionSnapshotTests.swift; sourceTree = "<group>"; };
 		DAA99F75D6C0662182DA03AB /* DeadlineDay.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DeadlineDay.swift; sourceTree = "<group>"; };
@@ -378,7 +374,6 @@
 				766849204C9C3E9011D58F46 /* AppModelCancelEndOfSessionTests.swift */,
 				B015AD3C715AB5F42EB44E61 /* AppModelEndOfSessionTests.swift */,
 				C103CFE5747B8132396472E0 /* AppModelExpiryAlarmTests.swift */,
-				5FEA6A7576E048D889E55C19 /* AppModelMiniTimerEpochTests.swift */,
 				E08D0B81C2C2D7D49E0B7824 /* AppModelRecoveryPromptTests.swift */,
 				681606B16406FD9CC58C5181 /* AppModelReorderTests.swift */,
 				8C53407EA932C7CBD09569EF /* AppModelSessionStartRoutingTests.swift */,
@@ -424,9 +419,8 @@
 			children = (
 				D661E8DE9DDA5E5D7B4F8D45 /* AppModel.swift */,
 				DCB77F69D38C6F6744551E0E /* AppSettings.swift */,
-				4E687188E43D05170E11C259 /* AutoCollapseDemo.swift */,
 				FB7CA3AD42DF0E4FD3808B5D /* ExpiryAlarmController.swift */,
-				D335BCE52B9EEF442F53641B /* MiniTimerPanelController.swift */,
+				11E28A78C958D9C4613DBDB2 /* MainWindowPresentationController.swift */,
 				52A6B2C67AE475FD9E4BC82F /* SystemTickScheduler.swift */,
 				9E32716BCC1F15BBB4C20284 /* VaultFolderNameSanitizer.swift */,
 				B9317D0CAB0CD1E41F943A28 /* VaultStructureValidator.swift */,
@@ -573,7 +567,6 @@
 				FCFAB1E251266D2C09013AB1 /* AppModelCancelEndOfSessionTests.swift in Sources */,
 				36AA785F718AEE079885A7CE /* AppModelEndOfSessionTests.swift in Sources */,
 				ACAE813FA210879E32A17019 /* AppModelExpiryAlarmTests.swift in Sources */,
-				4C28161E12A283C0F7DF33E6 /* AppModelMiniTimerEpochTests.swift in Sources */,
 				A32BEDCFC8619C6ABE44CBB8 /* AppModelRecoveryPromptTests.swift in Sources */,
 				2E5C41BE3B9D53099472C195 /* AppModelReorderTests.swift in Sources */,
 				B8AEE35BCA094F63E928B1DE /* AppModelSessionStartRoutingTests.swift in Sources */,
@@ -625,7 +618,6 @@
 				79E780DF2512D06E1F8CD03B /* AppSettings.swift in Sources */,
 				B9E22BF26DE00534CA7CE529 /* AtomicFileWriter.swift in Sources */,
 				C71E057857B6BCB5BF0CA4DA /* AtomicFileWriterError.swift in Sources */,
-				F26F35B5CC011F3FDC276B82 /* AutoCollapseDemo.swift in Sources */,
 				3D0BD19FB6B7D674DA97EB7D /* BreakLog.swift in Sources */,
 				459A582303927A76F5232ACC /* BreakTimerEngine.swift in Sources */,
 				7A96D25DEA2A230ADC85B45C /* BreakView.swift in Sources */,
@@ -648,7 +640,7 @@
 				443D3CE32D51A6DF3ADCDBA3 /* FrontmatterEncoder.swift in Sources */,
 				84E73409362F826BDBE0669B /* FrontmatterError.swift in Sources */,
 				335FFAE1E20D5816ACF0D335 /* FrontmatterSplitter.swift in Sources */,
-				2F61C905039BEBA16715711A /* MiniTimerPanelController.swift in Sources */,
+				DACFF49145A5719B90D7DEAD /* MainWindowPresentationController.swift in Sources */,
 				4CE0485DD586E39C8634CEB9 /* MiniTimerView.swift in Sources */,
 				FEC36812A2FF725735EA9B15 /* OnboardingView.swift in Sources */,
 				2A9EB76D2D7C75B7B6DE142C /* PostSessionChoiceView.swift in Sources */,

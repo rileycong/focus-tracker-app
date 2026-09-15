@@ -1,9 +1,8 @@
 import SwiftUI
 
 /// The compact always-on-top mini timer (issue #21, PRD §11, §10.2, §21),
-/// hosted inside `MiniTimerPanelController`'s borderless non-activating
-/// `NSPanel` (the AppKit side is fully isolated there — this file stays
-/// pure SwiftUI, no AppKit import).
+/// hosted inside the app's existing main window while it uses compact
+/// always-on-top presentation. This file stays pure SwiftUI.
 ///
 /// Shows EXACTLY the PRD §11 list: the **task title** ("Parent › Child"
 /// resolution, identical to #20's `TimerView`), the **countdown** —
@@ -11,8 +10,8 @@ import SwiftUI
 /// `TimerDisplay.countdownText` helpers (`m:ss` / `h:mm:ss` / `0:00`) — the
 /// **current session number for that task today**, a **Pause/Resume**
 /// control, and an **End/Stop** control — plus a restore affordance (the
-/// display area is click-to-restore, and the panel background itself
-/// drags/moves per the panel's `isMovableByWindowBackground`).
+/// display area is click-to-restore, and the compact window background is
+/// draggable).
 ///
 /// Deliberately NOT shown (pinned do-not-show list, PRD §11 — checked
 /// against the final UI): project, categories, metadata, ETA, next-task
@@ -20,11 +19,11 @@ import SwiftUI
 /// resolution is reused from #20; nothing else of the full timer's content.
 ///
 /// # Resizable layout adaptation (issue #28)
-/// The panel is user-resizable (`MiniTimerPanelController`'s `.resizable`
-/// style mask, clamped to `MiniTimerPanelLayout`'s min/max bounds), so the
-/// view no longer pins a fixed frame: it fills the panel's content view and
+/// The compact main window is user-resizable (clamped to
+/// `MiniTimerWindowLayout`'s min/max bounds), so the
+/// view no longer pins a fixed frame: it fills the compact window and
 /// adapts. The countdown digits scale with the window height through the
-/// pure `MiniTimerPanelLayout.countdownFontSize(forContentSize:)` helper
+/// pure `MiniTimerWindowLayout.countdownFontSize(forContentSize:)` helper
 /// (22pt at the min height → the #15 token base at the default size → 44pt
 /// at the max height, measured via a container-size preference so no
 /// AppKit/geometry API leaks into this file). Title, countdown and the
@@ -53,18 +52,18 @@ import SwiftUI
 /// full timer (§9.5) and, on confirm, calls the SAME `AppModel` end path
 /// (`endSession()` — both controls call the one path). The engine ends, the
 /// `FocusSessionResult` is retained, and the phase swaps to
-/// `.endingSession` — the observable-driven sync closes this panel and
-/// restores the main window showing the timer with the blocking
+/// `.endingSession` — the observable-driven sync restores normal main-window
+/// presentation showing the timer with the blocking
 /// end-of-session modal over it (the ONE presentation path, in the app
 /// shell). Submission returns the app to Tasks.
 ///
 /// # Expiry watch (issue #33)
 /// This view runs the same ~1 s `evaluateSessionExpiry()` watch loop as the
 /// full timer (see its type documentation), so mini mode is covered for the
-/// expiry alarm/auto-end: while collapsed this panel is the visible surface,
+/// expiry alarm/auto-end: while collapsed this compact window is the visible surface,
 /// and an expiry while unfocused starts the alarm — which restores the FULL
 /// timer (the model's `restoreFromMiniTimer()` on the alarm path) so the
-/// pinned shake is actually visible. The mini panel itself deliberately
+/// pinned shake is actually visible. The mini view itself deliberately
 /// never shakes (engineer's choice, documented) — beeps plus the restored
 /// shaking full window are the alarm's surface here.
 ///
@@ -78,17 +77,17 @@ import SwiftUI
 /// two countdowns then match by construction.
 struct MiniTimerView: View {
     /// The running session's display context (resolved at start, issue #19;
-    /// passed through the panel controller).
+    /// passed directly from the app shell).
     let context: AppModel.SessionContext
     /// The composition root — the same authoritative passthroughs as every
     /// other view, plus the lifted #20 session-number snapshot.
     let model: AppModel
 
     @State private var showsEndConfirmation = false
-    /// The live panel content size (issue #28): captured from layout via a
+    /// The live compact-window content size (issue #28): captured from layout via a
     /// preference (no AppKit), driving the countdown's adaptive font. Starts
     /// at the default size so the first render is already correct.
-    @State private var containerSize = MiniTimerPanelLayout.contentSize
+    @State private var containerSize = MiniTimerWindowLayout.contentSize
 
     var body: some View {
         VStack(spacing: DesignTokens.spacingS) {
@@ -96,7 +95,7 @@ struct MiniTimerView: View {
             controls
         }
         .padding(DesignTokens.spacingM)
-        // Fill the resizable panel (issue #28) instead of pinning the #21
+        // Fill the resizable compact window (issue #28) instead of pinning the #21
         // fixed frame; content centers in the larger card at big sizes.
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(containerSizeProbe)
@@ -108,7 +107,7 @@ struct MiniTimerView: View {
         ) {
             // The same `AppModel` path the full timer's End control calls
             // (issue #22): on confirm the phase enters `.endingSession` and
-            // the sync closes this panel, restoring the main window with
+            // the sync restores normal main-window presentation with
             // the end-of-session modal over the timer.
             Button("End Session", role: .destructive, action: endSession)
             Button("Cancel", role: .cancel) {}
@@ -120,8 +119,8 @@ struct MiniTimerView: View {
         .task {
             // The #33 expiry watch (issue #33): the same ~1 s idempotent
             // loop the full `TimerView` runs, so mini mode is covered too —
-            // the mini panel is the visible surface while collapsed (and
-            // the main window is ordered out), and expiry while unfocused
+            // the compact main window is the visible surface while collapsed,
+            // and expiry while unfocused
             // starts the alarm (which restores the full timer so the shake
             // is actually visible). Fully guarded — no-ops unless an
             // unhandled expiry is pending on a live session.
@@ -134,8 +133,8 @@ struct MiniTimerView: View {
 
     /// Invisible layout probe feeding `containerSize` (issue #28): pure
     /// SwiftUI measurement of the frame this view fills, so the countdown
-    /// font can adapt through the pure `MiniTimerPanelLayout` helper without
-    /// importing AppKit here. The measured size is the fixed panel-content
+    /// font can adapt through the pure `MiniTimerWindowLayout` helper without
+    /// importing AppKit here. The measured size is the compact window content
     /// frame (independent of the font), so no feedback loop.
     private var containerSizeProbe: some View {
         GeometryReader { proxy in
@@ -167,7 +166,7 @@ struct MiniTimerView: View {
                 let state = displayState()
                 Text(state.countdownText)
                     .font(.system(
-                        size: MiniTimerPanelLayout.countdownFontSize(
+                        size: MiniTimerWindowLayout.countdownFontSize(
                             forContentSize: containerSize),
                         weight: .thin,
                         design: .monospaced))
@@ -222,8 +221,8 @@ struct MiniTimerView: View {
         .controlSize(.small)
     }
 
-    /// The visible shape of the borderless panel: a rounded dark card
-    /// matching `DesignTokens.background` (the panel itself is transparent,
+    /// The visible shape of the borderless compact window: a rounded dark card
+    /// matching `DesignTokens.background` (the window itself is transparent,
     /// so these corners are the real window corners).
     private var miniBackground: some View {
         RoundedRectangle(cornerRadius: DesignTokens.panelCornerRadius, style: .continuous)
@@ -274,8 +273,8 @@ struct MiniTimerView: View {
 
     /// The confirm-End handler (issue #22): the SAME `AppModel` path the
     /// full timer's End control calls. Ends the engine, retains the result
-    /// and enters `.endingSession` — the sync closes this panel and
-    /// restores the main window with the end-of-session modal over it.
+    /// and enters `.endingSession` — the sync restores normal main-window
+    /// presentation with the end-of-session modal over it.
     /// The engine refuses a second end by contract; that cannot arise from
     /// the confirm, so the typed refusal is dropped here (house style).
     private func endSession() {

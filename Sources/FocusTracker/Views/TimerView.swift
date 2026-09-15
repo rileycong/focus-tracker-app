@@ -13,8 +13,8 @@ import SwiftUI
 /// Deliberately NOT shown (pinned do-not-show list, PRD §10.1): elapsed time,
 /// progress percentage, priority, effort, deadline, analytics, next-task
 /// suggestions. The collapse-to-mini control is #21's addition (below) — it
-/// drives the always-on-top mini panel (`MiniTimerPanelController` +
-/// `MiniTimerView`) and is absent from no other state.
+/// drives the same main window's always-on-top compact `MiniTimerView` and is
+/// absent from every other state.
 ///
 /// # End flow (issue #22, PRD §9.5, §12)
 /// The End Session control opens the minimal End/Cancel confirm (§9.5).
@@ -71,7 +71,7 @@ import SwiftUI
 /// (full-arc and paused-dim contrast, completed lighter than running).
 /// Deliberately unchanged: the BREAK ring keeps its blue
 /// `statusColor(.inProgress)` + green `.done` completion (`BreakView` —
-/// issue #35 changes only the focus rings), and the mini panel shows no
+/// issue #35 changes only the focus rings), and the mini view shows no
 /// ring at all (pinned §11 content — see `MiniTimerView`).
 ///
 /// The `SessionTimerPlaceholderView` this replaces was **deleted** (its
@@ -181,7 +181,7 @@ struct TimerView: View {
             // no-ops whenever no unhandled expiry is pending, so it is
             // harmless under `.endingSession` (this view re-renders beneath
             // the modal there) and in every other phase. `MiniTimerView`
-            // runs the same loop so the collapsed mini panel is covered
+            // runs the same loop so collapsed compact mode is covered
             // too.
             while !Task.isCancelled {
                 try? await Task.sleep(for: .seconds(1))
@@ -282,9 +282,8 @@ struct TimerView: View {
     private var controls: some View {
         HStack(spacing: DesignTokens.spacingM) {
             // Collapse-to-mini (issue #21 criterion 3, PRD §10.2): flips the
-            // model's mini-mode flag; the observable-driven sync in
-            // `FocusTrackerApp` shows the mini panel and `orderOut`s this
-            // window (the pinned choice over `miniaturize`). `TimerView`
+            // model's mini-mode flag; `FocusTrackerApp` swaps this shell to
+            // `MiniTimerView` and compacts the same on-screen window. `TimerView`
             // only exists while a session is active, so the control can
             // never appear while idle; `collapseToMiniTimer()` still guards
             // session-active (issue criterion 5).
@@ -340,7 +339,7 @@ struct TimerView: View {
     }
 
     /// The confirm-End handler (issue #22): the same `AppModel` path the
-    /// mini panel's End control calls. Ends the engine, retains the result
+    /// mini view's End control calls. Ends the engine, retains the result
     /// and enters `.endingSession` — the app shell presents the
     /// end-of-session modal over this timer; submission returns to Tasks.
     /// The engine refuses a second end by contract; that cannot arise from

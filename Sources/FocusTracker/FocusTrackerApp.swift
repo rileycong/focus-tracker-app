@@ -3,25 +3,9 @@ import SwiftUI
 @main
 struct FocusTrackerApp: App {
     @State private var model: AppModel
-    /// The always-on-top mini panel controller (issue #21): the one AppKit
-    /// surface, created over the model and driven purely from the observable
-    /// state by `syncMiniPanel()` below.
-    @State private var miniPanel: MiniTimerPanelController
-    /// The SwiftUI-lifecycle app delegate (issue #30): its
-    /// `applicationShouldTerminateAfterLastWindowClosed` returns `false`
-    /// exactly while the mini flag is on, so collapsing (which `orderOut`s
-    /// the `Window` scene's only window) no longer terminates the app. See
-    /// `FocusTrackerAppDelegate` for the pinned root-cause mechanism. It
-    /// implements no other hook — in particular no
-    /// `applicationShouldTerminate`, so Cmd+Q stays the default unblocked
-    /// terminate path (#27).
-    @NSApplicationDelegateAdaptor(FocusTrackerAppDelegate.self)
-    private var appDelegate: FocusTrackerAppDelegate
+    @State private var windowPresentation: MainWindowPresentationController
 
     init() {
-        // The vault path lives in the app's UserDefaults suite; the suite
-        // falling back to `.standard` is a deliberate, visible fallback for
-        // the practically unreachable unavailable-suite case (#14).
         let settings: AppSettings
         do {
             settings = try AppSettings(suiteName: AppSettings.defaultSuiteName)
@@ -29,83 +13,24 @@ struct FocusTrackerApp: App {
             settings = AppSettings(defaults: .standard)
         }
         _model = State(initialValue: AppModel(settings: settings))
-        _miniPanel = State(initialValue: MiniTimerPanelController(model: _model.wrappedValue))
-        appDelegate.model = _model.wrappedValue
-        // Issue #37: the delegate's presentation watchdog reconciles through
-        // the same controller instance the shell's sync drives (the same
-        // wiring pattern as `model` above).
-        appDelegate.miniPanel = _miniPanel.wrappedValue
+        _windowPresentation = State(initialValue: MainWindowPresentationController())
     }
 
     var body: some Scene {
-        // SINGLE WINDOW (issue #27 amendment): the #19 phase-driven shell
-        // used to live in a `WindowGroup`, so File → New Window / Cmd+N
-        // opened a duplicate whose own phase-driven content re-presented the
-        // REQUIRED `.endingSession` modal — a second, equally inescapable
-        // copy of it. The macOS 14 `Window` scene makes the app
-        // single-window: exactly one window can ever exist, so the modal can
-        // never re-present anywhere else. This is the deliberate utility-app
-        // shape (PRD §23: "keep the app small enough to behave like a
-        // utility rather than a workspace") — one task list, one focus
-        // session, one window; no multi-window feature is given up because
-        // none is offered.
+        // A `Window`, rather than `WindowGroup`, preserves the app's
+        // single-window contract. Compact mode reconfigures this same window.
         Window("Focus Tracker", id: "main") {
-            // The app-phase swap (issue #19, PRD §20.3; end flow issue #22;
-            // break flow issue #23): the start flow moves the app to the
-            // full-screen timer view (issue #20); confirming End moves it to
-            // `.endingSession` — the timer stays rendered with the blocking
-            // end-of-session modal over it — the required submission stops
-            // at `.postSessionChoice` (issue #23: Start Next Session /
-            // Take Break, NOTHING auto-starting), a running break shows the
-            // `.breakActive` countdown screen, and — the #34 amendment of
-            // #23's pinned exit — the choice's Start Next Session and the
-            // break's end open the session-start sheet DIRECTLY (the
-            // `.sessionStart` phase; only the sheet's Cancel returns to
-            // Tasks).
-            // The `.task` bootstrap runs once — the scene's single window
-            // (issue #27 amendment) is the only bootstrap site; the phase
-            // swap replaces the content, not the window identity.
             Group {
                 switch model.appPhase {
                 case .tasksView:
                     TasksView(model: model)
                 case .timerView(let context):
-                    TimerView(context: context, model: model)
+                    if model.isMiniTimerActive {
+                        MiniTimerView(context: context, model: model)
+                    } else {
+                        TimerView(context: context, model: model)
+                    }
                 case .endingSession(let result, _, let context):
-                    // The end-of-session modal (issue #22, PRD §12): ONE
-                    // presentation path, driven by the phase right here in
-                    // the app shell — never duplicated per view. The sheet
-                    // exists exactly while the phase is `.endingSession`
-                    // (submission or the #29 Cancel flips the phase; the
-                    // sheet leaves with the branch), and interactive
-                    // dismissal is disabled — the flow resolves only
-                    // through an explicit control (§12.5; #29 keeps the
-                    // dismissal disabled and makes the Cancel BUTTON the
-                    // affordance). Issue #27: the modal now also offers
-                    // Discard (typed confirm) after a failed append, so it
-                    // can never trap. The phase's middle payload member
-                    // (the #29 end-instant snapshot) is consumed by
-                    // `AppModel.cancelEndOfSession` — the shell never
-                    // touches it.
-                    //
-                    // Quit is NOT blocked while this modal is up (#27,
-                    // verified): the modal is a plain SwiftUI sheet and
-                    // nothing hooks `applicationShouldTerminate` — the one
-                    // app delegate (#30) answers only the
-                    // last-window-closed policy (AppKit default `true`
-                    // unless mini-collapsed) and stays out of the explicit
-                    // terminate path — AppKit's default terminate path ends
-                    // the app normally on Cmd+Q / app-menu Quit with the
-                    // sheet showing. No quit-confirmation dialog is added;
-                    // quitting may lose the unsubmitted session (the
-                    // documented §18 honest-loss window on
-                    // `.endingSession`) — the criterion is only that
-                    // quitting is not BLOCKED.
-                    // Amendment (#27): with the single-window scene above,
-                    // the "stuck" experience is impossible three ways —
-                    // Discard escapes a failed append, there is no second
-                    // window to re-present the modal in, and nothing hooks
-                    // termination.
                     TimerView(context: context, model: model)
                         .sheet(isPresented: .constant(true)) {
                             EndOfSessionModalView(
@@ -113,32 +38,11 @@ struct FocusTrackerApp: App {
                                 .interactiveDismissDisabled(true)
                         }
                 case .postSessionChoice(let completionFailure):
-                    // The post-submission choice (issue #23, PRD §14.1):
-                    // inline view (engineer's choice, documented on the
-                    // phase) in the same ONE phase-driven path. The payload
-                    // carries the #22 partial-outcome failure for the inline
-                    // warning.
                     PostSessionChoiceView(
                         model: model, completionFailure: completionFailure)
                 case .breakActive:
-                    // The break countdown (issue #23, PRD §14.2): the same
-                    // ONE phase-driven path; the view derives everything
-                    // from the model's break passthroughs.
                     BreakView(model: model)
                 case .sessionStart:
-                    // The direct-to-session-start routing (issue #34,
-                    // amending #23's pinned exit): the post-session
-                    // choice's Start Next Session and every break end
-                    // swap here. Same presentation shape as the #22
-                    // modal: the sheet presents over the still-rendered
-                    // previous screen — here the task list, matching
-                    // where Start Next Session used to land. The sheet's
-                    // pre-selection is the model's #34 last-session
-                    // target (eligibility-filtered by the view), Cancel
-                    // routes through `cancelSessionStart()` (no
-                    // dismissal environment to fall back on), and Start
-                    // runs the ordinary #19 flow (the phase swaps to
-                    // `.timerView`).
                     TasksView(model: model)
                         .sheet(isPresented: .constant(true)) {
                             SessionStartView(
@@ -159,36 +63,14 @@ struct FocusTrackerApp: App {
                                 onCancel: { model.cancelSessionStart() })
                         }
                 case .recoveryPrompt(let snapshot, let context):
-                    // The recovery prompt (issue #36): ONE phase-driven
-                    // presentation — the #22 modal pattern — whenever a
-                    // recovered (unfinished) session awaits the user's
-                    // choice. It appears on EVERY launch path with a pending
-                    // snapshot (normal launch, quit-with-running-session,
-                    // crash recovery) because `bootstrap()` is the single
-                    // surfacing site and the phase is swapped there; the
-                    // #19 `.pendingRecoveryUnresolved` refusal stays as the
-                    // defensive backstop. The sheet presents over the task
-                    // list (the `.sessionStart` shape — Discard lands right
-                    // back on Tasks) and interactive dismissal stays
-                    // disabled: the flow resolves only through Resume
-                    // (→ `.timerView`) or the confirmed Discard (→
-                    // `.tasksView`, starts allowed). The snapshot/context
-                    // payload is read-only here — both actions are the
-                    // model's.
                     TasksView(model: model)
                         .sheet(isPresented: .constant(true)) {
                             RecoveryPromptView(
-                                snapshot: snapshot, context: context,
-                                model: model)
+                                snapshot: snapshot, context: context, model: model)
                                 .interactiveDismissDisabled(true)
                         }
                 }
             }
-            // The break-log warning (issue #23 criterion 18): the small
-            // non-blocking banner for an append failure on the non-blocking
-            // break path — the flow already continued to Tasks; the warning
-            // rides above whatever phase is showing until the next break
-            // clears it.
             .overlay(alignment: .bottom) {
                 if let warning = model.pendingBreakLogWarning {
                     Text(warning)
@@ -202,41 +84,36 @@ struct FocusTrackerApp: App {
                         .transition(.opacity)
                 }
             }
-            .task { await model.bootstrap() }
-            // The #37 diagnostic harness (Sources/FocusTracker/App/
-            // AutoCollapseDemo.swift): a no-op unless the process was
-            // launched with `-autoCollapseDemo`.
-            .task {
-                await AutoCollapseDemo.runIfNeeded(model: model, miniPanel: miniPanel)
+            .frame(
+                minWidth: model.isMiniTimerActive
+                    ? MiniTimerWindowLayout.contentMinSize.width : 640,
+                idealWidth: model.isMiniTimerActive
+                    ? MiniTimerWindowLayout.contentSize.width : nil,
+                maxWidth: model.isMiniTimerActive
+                    ? MiniTimerWindowLayout.contentMaxSize.width : nil,
+                minHeight: model.isMiniTimerActive
+                    ? MiniTimerWindowLayout.contentMinSize.height : 420,
+                idealHeight: model.isMiniTimerActive
+                    ? MiniTimerWindowLayout.contentSize.height : nil,
+                maxHeight: model.isMiniTimerActive
+                    ? MiniTimerWindowLayout.contentMaxSize.height : nil)
+            .background {
+                MainWindowAccessor { window in
+                    windowPresentation.attach(window)
+                    syncWindowPresentation()
+                }
             }
-            // The mini-panel ↔ main-window sync (issue #21): fires on a
-            // collapse (`isMiniTimerActive` flip while the phase stays
-            // `.timerView`), on a restore (flag off), and on any end path
-            // (phase → `.endingSession`, flag already cleared by
-            // `endSession()`).
-            .onChange(of: model.appPhase) { _, _ in syncMiniPanel() }
-            // Issue #31: the sync delivery keys on the presentation EPOCH,
-            // not the flag. A flag-edge sync deadlocks: when a panel is lost
-            // (or a delivery missed) while `isMiniTimerActive` stays on, a
-            // repeated Mini click flips true→true, fires nothing, and mini
-            // mode is stranded (the reported "second attempt dead"). The
-            // epoch bumps on every accepted collapse/restore request, so
-            // every click re-delivers the level-driven sync below.
-            .onChange(of: model.miniTimerPresentationEpoch) { _, _ in syncMiniPanel() }
+            .task { await model.bootstrap() }
+            .onChange(of: model.appPhase) { _, _ in syncWindowPresentation() }
+            .onChange(of: model.isMiniTimerActive) { _, _ in syncWindowPresentation() }
             .preferredColorScheme(.dark)
-            .frame(minWidth: 640, minHeight: 420)
         }
     }
 
-    /// The observable-driven window-sync delivery (issue #21 criteria 3–5;
-    /// re-delivery/self-healing issue #31; level-driven reconciler #37):
-    /// the delivery sites (the `.onChange`s above) feed the ONE shared
-    /// reconciler — `MiniTimerPanelController.reconcilePresentation` — the
-    /// same level-driven body the #37 presentation watchdog runs on its ~1 s
-    /// cadence, so every path converges on the identical presentation logic
-    /// and none can drift. See that method for the per-state contract.
-    private func syncMiniPanel() {
-        MiniTimerPanelController.reconcilePresentation(
-            model: model, panel: miniPanel)
+    private func syncWindowPresentation() {
+        let compact = AppShellContent.resolve(
+            phase: model.appPhase,
+            isMiniTimerActive: model.isMiniTimerActive) == .miniTimer
+        windowPresentation.setCompact(compact)
     }
 }

@@ -1,301 +1,127 @@
+import AppKit
 import XCTest
 @testable import FocusTracker
 
-// The #19 nested type used below; file-local alias keeps it readable.
-private typealias SessionContext = AppModel.SessionContext
-
-/// The #37 mini-presentation contract additions: the pure frame-sanity
-/// predicate the show path now self-heals with, and the post-end stale
-/// click behaviour the stuck-state forensics demand.
-///
-/// # Why these are the #37 regressions that matter
-/// The user's real instance (forensically dumped live via CGWindowList
-/// while stuck: main window ordered out, NO panel window anywhere in the
-/// window server, no live session, app alive) proved the presentation can
-/// diverge from the observable state in ways no edge delivery ever
-/// repairs. The fix makes the presentation self-healing:
-/// - `show()` resets a panel stranded off-screen (display change while the
-///   frame survived — `frameIsFullyOnScreen` is that predicate, pure and
-///   pinned here), and
-/// - the app shell reconciles the presentation on a ~1 s level-driven
-///   cadence while a session lifecycle is open (AppKit-side, verified by
-///   the `-autoCollapseDemoGhost` harness run), so ANY vanish heals within
-///   ~1 s without user input.
-/// The stale-click tests pin the state machine's side of the contract: a
-/// click after the session ended must be a silent typed no-op that cannot
-/// re-deliver a stale collapse (the reconcile's repair-only domain).
-///
-/// Same fixture/temp-dir/FakeClock seams as `AppModelMiniTimerEpochTests`.
 @MainActor
 final class MiniTimerPresentationTests: XCTestCase {
+    private let visibleFrame = CGRect(x: 0, y: 0, width: 1440, height: 900)
 
-    // MARK: - Test doubles (same seams as the #13/#14/#19 tests)
-
-    private final class FakeClock: FocusSessionClock, @unchecked Sendable {
-        var monotonicSeconds: TimeInterval = 0
-        var wallClockNow = Date(timeIntervalSinceReferenceDate: 800_000_000)
+    private func makeNormalState() -> MainWindowPresentationState {
+        MainWindowPresentationState(
+            frame: CGRect(x: 180, y: 140, width: 860, height: 620),
+            level: .normal,
+            styleMask: [.titled, .closable, .miniaturizable, .resizable],
+            contentMinSize: CGSize(width: 640, height: 420),
+            contentMaxSize: CGSize(width: 1600, height: 1200),
+            collectionBehavior: [.managed],
+            titleVisibility: .visible,
+            titlebarAppearsTransparent: false,
+            isMovableByWindowBackground: false,
+            isOpaque: true,
+            backgroundColor: .windowBackgroundColor,
+            hasShadow: true)
     }
 
-    private final class ManualTickScheduler: ActiveSessionTickScheduler, @unchecked Sendable {
-        func schedule(after interval: TimeInterval, _ tick: @escaping @Sendable () -> Void) {}
-        func cancel() {}
+    private func makeWindow(from state: MainWindowPresentationState) -> NSWindow {
+        let window = NSWindow(
+            contentRect: state.frame,
+            styleMask: state.styleMask,
+            backing: .buffered,
+            defer: false)
+        window.level = state.level
+        window.contentMinSize = state.contentMinSize
+        window.contentMaxSize = state.contentMaxSize
+        window.collectionBehavior = state.collectionBehavior
+        window.titleVisibility = state.titleVisibility
+        window.titlebarAppearsTransparent = state.titlebarAppearsTransparent
+        window.isMovableByWindowBackground = state.isMovableByWindowBackground
+        window.isOpaque = state.isOpaque
+        window.backgroundColor = state.backgroundColor
+        window.hasShadow = state.hasShadow
+        window.setFrame(state.frame, display: false)
+        return window
     }
 
-    // MARK: - Fixture access
+    func testCollapseKeepsWindowOnScreenAndBuildsCompactPresentation() {
+        let normal = makeNormalState()
+        let transition = MainWindowCompactTransition.collapse(
+            from: normal, visibleFrame: visibleFrame)
 
-    private static let fixturesVault = URL(fileURLWithPath: #filePath)
-        .deletingLastPathComponent()
-        .deletingLastPathComponent()
-        .deletingLastPathComponent()
-        .appendingPathComponent("fixtures/sample-vault", isDirectory: true)
-
-    private var root: URL!
-    private var vaultURL: URL!
-    private var persistenceDirectory: URL!
-    private var suiteName: String!
-    private var settings: AppSettings!
-    private var clock: FakeClock!
-
-    override func setUpWithError() throws {
-        try super.setUpWithError()
-        root = URL(fileURLWithPath: NSTemporaryDirectory(), isDirectory: true)
-            .appendingPathComponent("MiniTimerPresentationTests-\(UUID().uuidString)", isDirectory: true)
-        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
-        vaultURL = root.appendingPathComponent("vault", isDirectory: true)
-        try FileManager.default.copyItem(at: Self.fixturesVault, to: vaultURL)
-        persistenceDirectory = root.appendingPathComponent("persistence", isDirectory: true)
-        suiteName = "MiniTimerPresentationTests-\(UUID().uuidString)"
-        settings = try AppSettings(suiteName: suiteName)
-        clock = FakeClock()
+        XCTAssertEqual(transition.visibilityAction, .keepOnScreen)
+        XCTAssertEqual(transition.normal, normal)
+        XCTAssertEqual(
+            transition.compact.frame,
+            MiniTimerWindowLayout.defaultTopRightFrame(visibleFrame: visibleFrame))
+        XCTAssertEqual(transition.compact.level, .floating)
+        XCTAssertEqual(transition.compact.styleMask, [.borderless, .resizable])
+        XCTAssertEqual(transition.compact.contentMinSize, CGSize(width: 220, height: 104))
+        XCTAssertEqual(transition.compact.contentMaxSize, CGSize(width: 520, height: 240))
+        XCTAssertTrue(transition.compact.collectionBehavior.contains(.canJoinAllSpaces))
+        XCTAssertTrue(transition.compact.collectionBehavior.contains(.fullScreenAuxiliary))
+        XCTAssertTrue(transition.compact.isMovableByWindowBackground)
     }
 
-    override func tearDownWithError() throws {
-        if let root { try? FileManager.default.removeItem(at: root) }
-        if let suiteName {
-            UserDefaults().removePersistentDomain(forName: suiteName)
-        }
-        try super.setUpWithError()
+    func testRestoreRecoversEveryCapturedPresentationProperty() {
+        let normal = makeNormalState()
+        let transition = MainWindowCompactTransition.collapse(
+            from: normal, visibleFrame: visibleFrame)
+
+        XCTAssertEqual(transition.normal, normal)
     }
 
-    // MARK: - Helpers
-
-    private func makeConfiguredModel() async -> AppModel {
-        settings.vaultPath = vaultURL.path(percentEncoded: false)
-        let model = AppModel(
-            settings: settings,
-            persistenceDirectory: persistenceDirectory,
-            scheduler: ManualTickScheduler(),
-            sessionClock: clock)
-        await model.bootstrap()
-        return model
-    }
-
-    private func writeTaskFile(_ title: String, id: UUID) throws {
-        let lines = [
-            "---",
-            "id: \(id.uuidString)",
-            "title: \(title)",
-            "status: To Do",
-            "categories:",
-            "  - Testing",
-            "---",
-        ]
-        try (lines.joined(separator: "\n") + "\n").write(
-            to: vaultURL.appendingPathComponent("Tasks", isDirectory: true)
-                .appendingPathComponent("\(title).md"),
-            atomically: true, encoding: .utf8)
-    }
-
-    private func startRunningSession(on model: AppModel, taskID: UUID) async throws
-        -> SessionContext
-    {
-        let outcome = try await model.startSession(taskID: taskID)
-        guard case .started(let context) = outcome else {
-            XCTFail("expected .started(...), got \(outcome)")
-            throw TestFailure()
-        }
-        return context
-    }
-
-    private struct TestFailure: Error {}
-
-    // MARK: - frameIsFullyOnScreen (the show-path self-heal predicate)
-
-    func testFrameInsideSingleScreenIsOnScreen() {
-        let screen = CGRect(x: 0, y: 0, width: 1440, height: 900)
-        let frame = CGRect(x: 1200, y: 750, width: 200, height: 100)
-        XCTAssertTrue(
-            MiniTimerPanelLayout.frameIsFullyOnScreen(frame, visibleFrames: [screen]))
-    }
-
-    func testFrameFullyOutsideEveryScreenIsOffScreen() {
-        // The #37 vanish shape: the panel's frame outlived its display
-        // (lid closed / display unplugged) and now sits in dead coordinate
-        // space — silently invisible to the user.
-        let screen = CGRect(x: 0, y: 0, width: 1440, height: 900)
-        let stranded = CGRect(x: 3000, y: 1200, width: 260, height: 112)
-        XCTAssertFalse(
-            MiniTimerPanelLayout.frameIsFullyOnScreen(stranded, visibleFrames: [screen]))
-    }
-
-    func testFramePartiallyOutsideIsOffScreen() {
-        let screen = CGRect(x: 0, y: 0, width: 1440, height: 900)
-        let clipped = CGRect(x: 1380, y: 850, width: 260, height: 112)
-        XCTAssertFalse(
-            MiniTimerPanelLayout.frameIsFullyOnScreen(clipped, visibleFrames: [screen]))
-    }
-
-    func testFrameInsideSecondScreenOfTwoIsOnScreen() {
-        let left = CGRect(x: 0, y: 0, width: 1440, height: 900)
-        let right = CGRect(x: 1440, y: 0, width: 2560, height: 1440)
-        let frame = CGRect(x: 3700, y: 1300, width: 260, height: 112)
-        XCTAssertTrue(
-            MiniTimerPanelLayout.frameIsFullyOnScreen(frame, visibleFrames: [left, right]))
-    }
-
-    func testFrameSpanningTwoAdjacentScreensIsOnScreen() {
-        let left = CGRect(x: 0, y: 0, width: 1440, height: 900)
-        let right = CGRect(x: 1440, y: 0, width: 1440, height: 900)
-        let spanning = CGRect(x: 1400, y: 400, width: 200, height: 100)
-        XCTAssertTrue(
-            MiniTimerPanelLayout.frameIsFullyOnScreen(spanning, visibleFrames: [left, right]))
-    }
-
-    func testNoScreensMeansOffScreen() {
-        let frame = CGRect(x: 0, y: 0, width: 260, height: 112)
-        XCTAssertFalse(
-            MiniTimerPanelLayout.frameIsFullyOnScreen(frame, visibleFrames: []))
-    }
-
-    // MARK: - Restore stability (the second-stage user repro)
-
-    func testRestoreRemainsFullAcrossReconcileTicksAndAllowsFreshCollapse() async throws {
-        let taskID = UUID()
-        try writeTaskFile("Alpha task", id: taskID)
-        let model = await makeConfiguredModel()
-        let context = try await startRunningSession(on: model, taskID: taskID)
-        let panel = MiniTimerPanelController(model: model)
+    func testThreeCyclesAndDuplicateRequestsAreStableOnSameWindow() {
+        let expected = makeNormalState()
+        let window = makeWindow(from: expected)
+        let identity = window.windowNumber
+        let windowCount = NSApp.windows.count
+        let controller = MainWindowPresentationController()
+        controller.attach(window)
 
         for cycle in 1...3 {
-            model.collapseToMiniTimer()
-            // Present the real panel without ordering out XCTest's host
-            // window; production collapse-window ordering is covered by the
-            // harness and the existing termination-policy tests.
-            panel.show(context: context)
-            XCTAssertTrue(model.isMiniTimerActive, "cycle \(cycle): collapsed")
-            XCTAssertTrue(panel.hasLivePanel, "cycle \(cycle): panel presented")
+            controller.setCompact(true)
+            controller.setCompact(true)
+            XCTAssertEqual(window.windowNumber, identity, "cycle \(cycle): identity")
+            XCTAssertEqual(window.level, .floating, "cycle \(cycle): floating")
+            XCTAssertFalse(window.isMiniaturized, "cycle \(cycle): never minimized")
 
-            model.restoreFromMiniTimer()
-            let restoredEpoch = model.miniTimerPresentationEpoch
-            MiniTimerPanelController.reconcilePresentation(model: model, panel: panel)
-            XCTAssertFalse(model.isMiniTimerActive, "cycle \(cycle): restored")
-            XCTAssertFalse(panel.hasLivePanel, "cycle \(cycle): panel dismissed")
-
-            // Repeated level-driven watchdog reconciliations must not replay
-            // a stale collapse after the explicit restore.
-            for tick in 1...3 {
-                MiniTimerPanelController.reconcilePresentation(model: model, panel: panel)
-                XCTAssertFalse(
-                    model.isMiniTimerActive,
-                    "cycle \(cycle), tick \(tick): full remains desired")
-                model.restoreFromMiniTimer()
-                XCTAssertEqual(
-                    model.miniTimerPresentationEpoch, restoredEpoch,
-                    "cycle \(cycle), tick \(tick): duplicate restore is idempotent")
-            }
+            controller.setCompact(false)
+            controller.setCompact(false)
+            XCTAssertEqual(
+                MainWindowPresentationState.capture(window), expected,
+                "cycle \(cycle): exact restore")
         }
 
-        model.collapseToMiniTimer()
-        panel.show(context: context)
-        XCTAssertTrue(model.isMiniTimerActive, "a fresh collapse still works")
-        XCTAssertTrue(panel.hasLivePanel, "the fresh mini panel is presented")
-        model.restoreFromMiniTimer()
-        MiniTimerPanelController.reconcilePresentation(model: model, panel: panel)
+        XCTAssertEqual(NSApp.windows.count, windowCount, "no panel or second window created")
     }
 
-    func testDuplicateRestoreDeliveryIsIdempotent() async throws {
-        let taskID = UUID()
-        try writeTaskFile("Alpha task", id: taskID)
-        let model = await makeConfiguredModel()
-        let context = try await startRunningSession(on: model, taskID: taskID)
-        let panel = MiniTimerPanelController(model: model)
-        model.collapseToMiniTimer()
-        panel.show(context: context)
+    func testEndFromMiniRestoresNormalPresentation() {
+        let expected = makeNormalState()
+        let window = makeWindow(from: expected)
+        let controller = MainWindowPresentationController()
+        controller.attach(window)
+        controller.setCompact(true)
 
-        model.restoreFromMiniTimer()
-        MiniTimerPanelController.reconcilePresentation(model: model, panel: panel)
-        let epoch = model.miniTimerPresentationEpoch
-        model.restoreFromMiniTimer()
-        MiniTimerPanelController.reconcilePresentation(model: model, panel: panel)
+        // End clears the model flag; the shell delivers the same explicit
+        // non-compact request as Restore.
+        controller.setCompact(false)
 
-        XCTAssertFalse(model.isMiniTimerActive)
-        XCTAssertEqual(model.miniTimerPresentationEpoch, epoch)
-        XCTAssertFalse(panel.hasLivePanel)
+        XCTAssertEqual(MainWindowPresentationState.capture(window), expected)
     }
 
-    // MARK: - Post-end stale clicks (the 84129 stuck-state forensics)
+    func testShellMiniFlagSelectsMiniContentWithoutChangingPhase() {
+        let context = AppModel.SessionContext(
+            taskID: UUID(), title: "Task", parentTaskTitle: nil,
+            project: nil, categories: [])
+        let phase = AppModel.AppPhase.timerView(context)
 
-    func testCollapseAfterSessionEndedIsRefusedWithoutEpochBump() async throws {
-        // The user's stuck instance reached "main hidden, no panel, no
-        // session": a collapse while collapsed, then the session ended —
-        // and a further Mini click must not re-deliver a stale collapse.
-        // The guards refuse (no session / no .timerView), nothing bumps,
-        // so the level-driven reconciler's repair-only domain is never
-        // fed a stale collapse by a dead lifecycle.
-        let taskID = UUID()
-        try writeTaskFile("Alpha task", id: taskID)
-        let model = await makeConfiguredModel()
-        _ = try await startRunningSession(on: model, taskID: taskID)
-
-        model.collapseToMiniTimer()
-        XCTAssertTrue(model.isMiniTimerActive)
-        XCTAssertEqual(model.miniTimerPresentationEpoch, 1)
-
-        _ = try model.endSession()
-        XCTAssertFalse(model.isMiniTimerActive, "the end clears the flag")
-        XCTAssertEqual(model.miniTimerPresentationEpoch, 1, "the end does not bump")
-
-        // The stale Mini click after the end (the exact 84129 situation).
-        model.collapseToMiniTimer()
-        XCTAssertFalse(model.isMiniTimerActive)
         XCTAssertEqual(
-            model.miniTimerPresentationEpoch, 1,
-            "a refused post-end collapse must not deliver a sync run")
-
-        // The stale restore click is the same typed no-op.
-        model.restoreFromMiniTimer()
-        XCTAssertFalse(model.isMiniTimerActive)
+            AppShellContent.resolve(phase: phase, isMiniTimerActive: false),
+            .fullTimer)
         XCTAssertEqual(
-            model.miniTimerPresentationEpoch, 1,
-            "a refused post-end restore must not deliver a sync run")
-    }
-
-    func testEndFromMiniClearsFlagAndNextSessionStartsUncollapsed() async throws {
-        // The end-from-mini path (the #30 pinned order's consumer): flag
-        // cleared at the confirm instant, phase `.endingSession` — the
-        // reconciler's restore branch then shows the main window and
-        // dismisses the panel on this delivery; a fresh session starts in
-        // the full view (nothing persisted).
-        let taskID = UUID()
-        try writeTaskFile("Alpha task", id: taskID)
-        let model = await makeConfiguredModel()
-        let context = try await startRunningSession(on: model, taskID: taskID)
-
-        model.collapseToMiniTimer()
-        XCTAssertTrue(model.isMiniTimerActive)
-
-        _ = try model.endSession()
-        XCTAssertFalse(model.isMiniTimerActive)
-        guard case .endingSession = model.appPhase else {
-            XCTFail("expected .endingSession, got \(model.appPhase)")
-            return
-        }
-
-        // The same session cannot be re-collapsed by a stale click while
-        // the end flow is unresolved.
-        model.collapseToMiniTimer()
-        XCTAssertFalse(model.isMiniTimerActive)
-        XCTAssertEqual(model.miniTimerPresentationEpoch, 1)
-        _ = context
+            AppShellContent.resolve(phase: phase, isMiniTimerActive: true),
+            .miniTimer)
+        XCTAssertEqual(
+            AppShellContent.resolve(phase: .tasksView, isMiniTimerActive: true),
+            .other)
     }
 }

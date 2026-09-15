@@ -9,7 +9,7 @@ import AppKit
 /// the Swift surface of AppKit's C `NSBeep`, which the apinotes hide from
 /// Swift — see `init`), `NSApplication`'s
 /// activation notification and the run-loop timer live here and nowhere else
-/// (the `MiniTimerPanelController` precedent: AppKit usage is isolated to its
+/// (the main-window presentation precedent: AppKit usage is isolated to its
 /// own file; `AppModel` stays AppKit-free and owns this controller instead).
 /// The beep action and the app-active probe are injected closures, so tests
 /// drive the whole state machine without touching AppKit: they count beeps
