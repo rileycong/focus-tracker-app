@@ -346,7 +346,7 @@ struct TasksView: View {
                     .font(DesignTokens.sectionFont)
                 Spacer()
                 Text("\(section.totalCount)")
-                    .font(DesignTokens.annotationFont)
+                    .font(DesignTokens.tasksMetadataFont)
                     .foregroundStyle(.secondary)
             }
             .padding(.vertical, DesignTokens.spacingS)
@@ -359,8 +359,9 @@ struct TasksView: View {
     /// order.
     private func statusGroupView(_ group: TaskStatusGroup) -> some View {
         DisclosureGroup(isExpanded: viewModel.expandedBinding(forKey: group.collapseKey)) {
-            ForEach(group.tasks) { task in
-                TaskRowView(task: task, viewModel: viewModel, subtaskActions: subtaskActions)
+            VStack(alignment: .leading, spacing: DesignTokens.tasksRowSpacing) {
+                ForEach(group.tasks) { task in
+                    TaskRowView(task: task, viewModel: viewModel, subtaskActions: subtaskActions)
                     // #18 drag reorder (within-group only): dragging carries
                     // the task's ID; dropping onto a row of this group reorders
                     // the dragged task to that row's position in the group's
@@ -418,19 +419,20 @@ struct TasksView: View {
                             moveTask(task, up: false, in: group)
                         }
                     }
+                }
             }
         } label: {
             HStack(spacing: DesignTokens.spacingS) {
                 Circle()
                     .fill(DesignTokens.statusColor(group.status))
                     .frame(
-                        width: DesignTokens.statusDotSize,
-                        height: DesignTokens.statusDotSize)
+                        width: DesignTokens.tasksStatusDotSize,
+                        height: DesignTokens.tasksStatusDotSize)
                 Text(group.status.rawValue)
                     .font(DesignTokens.statusGroupFont)
                 Spacer()
                 Text("\(group.tasks.count)")
-                    .font(DesignTokens.annotationFont)
+                    .font(DesignTokens.tasksMetadataFont)
                     .foregroundStyle(.secondary)
             }
             .padding(.vertical, DesignTokens.spacingXS)

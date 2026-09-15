@@ -41,6 +41,18 @@ enum DesignTokens {
     /// Chip remove glyph size in the forms' category tokens.
     static let chipRemoveIconSize: CGFloat = 9
 
+    // Tasks inventory sizing is intentionally separate so forms, sheets and
+    // timer surfaces keep their existing scale.
+    static let tasksParentTitleSize: CGFloat = 16
+    static let tasksSubtaskTitleSize: CGFloat = 14
+    static let tasksMetadataSize: CGFloat = 12
+    static let tasksChipSize: CGFloat = 11
+    static let tasksStatusDotSize: CGFloat = 9
+    static let tasksChevronIconSize: CGFloat = 10
+    static let tasksRowVerticalPadding: CGFloat = 10
+    static let tasksRowSpacing: CGFloat = 4
+    static let tasksSubtaskIndent: CGFloat = 22
+
     // MARK: - Motion (subtle per PRD §21 — timing, no effects)
 
     /// The ring's per-second tick — linear so the arc advances evenly.
@@ -72,6 +84,12 @@ enum DesignTokens {
     /// Sheet headers (task/subtask forms) and the degraded-state banner
     /// title — the mid-weight heading between `titleFont` and the row fonts.
     static let sheetHeaderFont: Font = .headline
+    /// Tasks inventory hierarchy: parents lead; nested rows and metadata step down.
+    static let tasksParentTitleFont: Font = .system(
+        size: tasksParentTitleSize, weight: .semibold)
+    static let tasksSubtaskTitleFont: Font = .system(size: tasksSubtaskTitleSize)
+    static let tasksMetadataFont: Font = .system(size: tasksMetadataSize)
+    static let tasksChipFont: Font = .system(size: tasksChipSize, weight: .medium)
 
     // MARK: - Colors (dark-first; the app enforces `.dark` at the root)
 

@@ -18,6 +18,22 @@ import SwiftUI
 /// arc and the `pausedArcOpacity`-dimmed paused state.
 final class DesignTokensTests: XCTestCase {
 
+    func testTasksInventoryScaleAndHierarchy() {
+        XCTAssertEqual(DesignTokens.tasksParentTitleSize, 16)
+        XCTAssertEqual(DesignTokens.tasksSubtaskTitleSize, 14)
+        XCTAssertEqual(DesignTokens.tasksMetadataSize, 12)
+        XCTAssertEqual(DesignTokens.tasksChipSize, 11)
+        XCTAssertGreaterThan(
+            DesignTokens.tasksParentTitleSize, DesignTokens.tasksSubtaskTitleSize)
+        XCTAssertGreaterThan(
+            DesignTokens.tasksSubtaskTitleSize, DesignTokens.tasksMetadataSize)
+        XCTAssertEqual(DesignTokens.tasksRowVerticalPadding, 10)
+        XCTAssertEqual(DesignTokens.tasksRowSpacing, 4)
+        XCTAssertEqual(DesignTokens.tasksSubtaskIndent, 22)
+        XCTAssertEqual(DesignTokens.tasksStatusDotSize, 9)
+        XCTAssertEqual(DesignTokens.tasksChevronIconSize, 10)
+    }
+
     // MARK: - Helpers (sRGB resolution + WCAG contrast)
 
     /// Resolves a SwiftUI `Color` to its sRGB components — the tokens are

@@ -75,10 +75,10 @@ struct SubtaskRowView: View {
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 0) {
+        VStack(alignment: .leading, spacing: DesignTokens.tasksRowSpacing) {
             row
             if hasChildren && isExpanded {
-                VStack(alignment: .leading, spacing: 0) {
+                VStack(alignment: .leading, spacing: DesignTokens.tasksRowSpacing) {
                     ForEach(subtask.children) { child in
                         SubtaskRowView(
                             taskID: taskID, subtask: child,
@@ -87,7 +87,7 @@ struct SubtaskRowView: View {
                             viewModel: viewModel, actions: actions)
                     }
                 }
-                .padding(.leading, DesignTokens.spacingM)
+                .padding(.leading, DesignTokens.tasksSubtaskIndent)
             }
         }
     }
@@ -99,7 +99,8 @@ struct SubtaskRowView: View {
                     viewModel.toggleExpanded(forKey: collapseKey)
                 } label: {
                     Image(systemName: "chevron.right")
-                        .font(.system(size: DesignTokens.chevronIconSize, weight: .semibold))
+                        .font(.system(
+                            size: DesignTokens.tasksChevronIconSize, weight: .semibold))
                         .foregroundStyle(.secondary)
                         .rotationEffect(.degrees(isExpanded ? 90 : 0))
                 }
@@ -108,20 +109,23 @@ struct SubtaskRowView: View {
             } else {
                 // Keep titles aligned with sibling nodes that do disclose.
                 Color.clear
-                    .frame(width: DesignTokens.statusDotSize + 1, height: 1)
+                    .frame(width: DesignTokens.tasksStatusDotSize + 1, height: 1)
             }
             Circle()
                 .fill(DesignTokens.statusColor(subtask.status))
-                .frame(width: DesignTokens.statusDotSize, height: DesignTokens.statusDotSize)
+                .frame(
+                    width: DesignTokens.tasksStatusDotSize,
+                    height: DesignTokens.tasksStatusDotSize)
                 .accessibilityLabel(Text(subtask.status.rawValue))
             Text(subtask.title)
-                .font(DesignTokens.bodyFont)
+                .font(DesignTokens.tasksSubtaskTitleFont)
+                .foregroundStyle(.secondary)
                 .lineLimit(1)
             if hasChildren {
                 Label(
                     "\(subtask.children.count)",
                     systemImage: "list.bullet.indent")
-                    .font(DesignTokens.annotationFont)
+                    .font(DesignTokens.tasksMetadataFont)
                     .labelStyle(.titleAndIcon)
                     .foregroundStyle(.secondary)
             }
@@ -136,14 +140,14 @@ struct SubtaskRowView: View {
             }
             if let deadline = subtask.deadline {
                 Text(deadline.formatted(date: .abbreviated, time: .omitted))
-                    .font(DesignTokens.annotationFont)
+                    .font(DesignTokens.tasksMetadataFont)
                     .foregroundStyle(
                         TasksGrouping.isOverdue(deadline: deadline, now: .now)
                             ? DesignTokens.overdue
                             : Color.secondary)
             }
         }
-        .padding(.vertical, DesignTokens.rowVerticalPadding)
+        .padding(.vertical, DesignTokens.tasksRowVerticalPadding)
         .padding(.horizontal, DesignTokens.spacingS)
         .contentShape(Rectangle())
         // #18 drag reorder: the drop target is this row; a drop lands the
@@ -231,7 +235,7 @@ struct SubtaskRowView: View {
     /// A small capsule chip (priority, effort) — the `TaskRowView` language.
     private func chip(_ text: String) -> some View {
         Text(text)
-            .font(DesignTokens.chipFont)
+            .font(DesignTokens.tasksChipFont)
             .padding(.horizontal, DesignTokens.spacingS)
             .padding(.vertical, DesignTokens.spacingXS)
             .background(DesignTokens.chipBackground)

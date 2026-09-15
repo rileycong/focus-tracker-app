@@ -25,12 +25,12 @@ struct TaskRowView: View {
     private var hasSubtasks: Bool { !task.subtasks.isEmpty }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 0) {
+        VStack(alignment: .leading, spacing: DesignTokens.tasksRowSpacing) {
             row
             if hasSubtasks
                 && viewModel.isExpanded(forKey: TasksGrouping.taskCollapseKey(task.id))
             {
-                VStack(alignment: .leading, spacing: 0) {
+                VStack(alignment: .leading, spacing: DesignTokens.tasksRowSpacing) {
                     ForEach(task.subtasks) { subtask in
                         SubtaskRowView(
                             taskID: task.id, subtask: subtask,
@@ -39,7 +39,7 @@ struct TaskRowView: View {
                             viewModel: viewModel, actions: subtaskActions)
                     }
                 }
-                .padding(.leading, DesignTokens.spacingM)
+                .padding(.leading, DesignTokens.tasksSubtaskIndent)
             }
         }
     }
@@ -51,7 +51,8 @@ struct TaskRowView: View {
                     viewModel.toggleExpanded(forKey: TasksGrouping.taskCollapseKey(task.id))
                 } label: {
                     Image(systemName: "chevron.right")
-                        .font(.system(size: DesignTokens.chevronIconSize, weight: .semibold))
+                        .font(.system(
+                            size: DesignTokens.tasksChevronIconSize, weight: .semibold))
                         .foregroundStyle(.secondary)
                         .rotationEffect(
                             .degrees(
@@ -65,16 +66,18 @@ struct TaskRowView: View {
             }
             Circle()
                 .fill(DesignTokens.statusColor(task.status))
-                .frame(width: DesignTokens.statusDotSize, height: DesignTokens.statusDotSize)
+                .frame(
+                    width: DesignTokens.tasksStatusDotSize,
+                    height: DesignTokens.tasksStatusDotSize)
                 .accessibilityLabel(Text(task.status.rawValue))
             Text(task.title)
-                .font(DesignTokens.bodyFont)
+                .font(DesignTokens.tasksParentTitleFont)
                 .lineLimit(1)
             if hasSubtasks {
                 Label(
                     "\(task.subtasks.count)",
                     systemImage: "list.bullet.indent")
-                    .font(DesignTokens.annotationFont)
+                    .font(DesignTokens.tasksMetadataFont)
                     .labelStyle(.titleAndIcon)
                     .foregroundStyle(.secondary)
             }
@@ -89,7 +92,7 @@ struct TaskRowView: View {
             }
             if let deadline = task.deadline {
                 Text(deadline.formatted(date: .abbreviated, time: .omitted))
-                    .font(DesignTokens.annotationFont)
+                    .font(DesignTokens.tasksMetadataFont)
                     .foregroundStyle(
                         TasksGrouping.isOverdue(deadline: deadline, now: .now)
                             ? DesignTokens.overdue
@@ -100,7 +103,7 @@ struct TaskRowView: View {
                     .foregroundStyle(.secondary)
             }
         }
-        .padding(.vertical, DesignTokens.rowVerticalPadding)
+        .padding(.vertical, DesignTokens.tasksRowVerticalPadding)
         .padding(.horizontal, DesignTokens.spacingS)
         .background(
             viewModel.isSelected(task.id)
@@ -117,7 +120,7 @@ struct TaskRowView: View {
     /// A small capsule chip (priority, effort, category).
     private func chip(_ text: String) -> some View {
         Text(text)
-            .font(DesignTokens.chipFont)
+            .font(DesignTokens.tasksChipFont)
             .padding(.horizontal, DesignTokens.spacingS)
             .padding(.vertical, DesignTokens.spacingXS)
             .background(DesignTokens.chipBackground)
