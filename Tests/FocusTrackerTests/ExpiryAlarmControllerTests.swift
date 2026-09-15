@@ -132,6 +132,21 @@ final class ExpiryAlarmControllerTests: XCTestCase {
         XCTAssertEqual(stateLog.values, [true, false], "exactly one flip pair")
     }
 
+    func testDeinitStopsOwnedPlayer() {
+        let player = PlayerSpy()
+        weak var weakAlarm: ExpiryAlarmController?
+        autoreleasepool {
+            var alarm: ExpiryAlarmController? = ExpiryAlarmController(
+                player: player, fallbackBeep: {}, isAppActive: { false })
+            weakAlarm = alarm
+            alarm?.start()
+            alarm = nil
+        }
+
+        XCTAssertNil(weakAlarm, "timer and observer must not retain the controller")
+        XCTAssertEqual(player.stopCount, 1, "deinit explicitly silences playback")
+    }
+
     // MARK: - Focus back
 
     func testFocusBackWhileAlarmingStopsAndDeliversFocusBackOnce() {

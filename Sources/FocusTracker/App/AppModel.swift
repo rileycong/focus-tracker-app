@@ -1,6 +1,20 @@
 import Foundation
 import Observation
 
+@MainActor
+public protocol ExpiryAlarmActionScheduling: AnyObject {
+    func schedule(_ action: @escaping @MainActor @Sendable () async -> Void)
+}
+
+@MainActor
+public final class SystemExpiryAlarmActionScheduler: ExpiryAlarmActionScheduling {
+    public init() {}
+
+    public func schedule(_ action: @escaping @MainActor @Sendable () async -> Void) {
+        Task { await action() }
+    }
+}
+
 /// The composition root (issue #14): a `@MainActor @Observable` model that
 /// owns and wires every layer built so far — `VaultStore` (#6–#10),
 /// `DailyLogStore` (#11), `FocusSessionEngine` + `ActiveSessionCoordinator`
@@ -639,6 +653,7 @@ public final class AppModel {
     /// injected; its callbacks are wired to the observable flag and the
     /// focus-back auto-end below.
     private let expiryAlarm: ExpiryAlarmController
+    private let expiryAlarmActionScheduler: any ExpiryAlarmActionScheduling
     private var settings: AppSettings
 
     // MARK: - Observable state
@@ -733,6 +748,8 @@ public final class AppModel {
     ///     a production one with the real system-beep/activation probe is
     ///     constructed when nil; its callbacks are wired to
     ///     `isExpiryAlarmActive` and the focus-back auto-end either way).
+    ///   - expiryAlarmActionScheduler: Runs the asynchronous break-end action
+    ///     after alarm focus-back (production: a task; tests: a manual event).
     ///
     /// Construction is synchronous and performs no I/O: the stores are
     /// created when a path is stored, and the actual load + recovery
@@ -744,7 +761,9 @@ public final class AppModel {
         scheduler: any ActiveSessionTickScheduler = SystemTickScheduler(),
         sessionClock: any FocusSessionClock = SystemFocusSessionClock(),
         autosaveInterval: TimeInterval = AppModel.autosaveIntervalSeconds,
-        expiryAlarm: ExpiryAlarmController? = nil
+        expiryAlarm: ExpiryAlarmController? = nil,
+        expiryAlarmActionScheduler: any ExpiryAlarmActionScheduling =
+            SystemExpiryAlarmActionScheduler()
     ) {
         self.settings = settings
         let persistence = FileActiveSessionPersistence(directory: persistenceDirectory)
@@ -763,6 +782,7 @@ public final class AppModel {
             autosaveInterval: autosaveInterval)
         let alarm = expiryAlarm ?? ExpiryAlarmController()
         self.expiryAlarm = alarm
+        self.expiryAlarmActionScheduler = expiryAlarmActionScheduler
         // Wired after full initialization (the closures capture self):
         // the shake flag rides the alarm's state changes, and the focus-back
         // signal runs the #33 auto-end (the controller already stopped the
@@ -2098,7 +2118,9 @@ public final class AppModel {
         case .session:
             autoEndExpiredSession()
         case .breakTimer:
-            Task { await endBreak() }
+            expiryAlarmActionScheduler.schedule { [weak self] in
+                await self?.endBreak()
+            }
         case nil:
             break
         }

@@ -150,9 +150,10 @@ public final class ExpiryAlarmController: NSObject {
         onFocusBack?()
     }
 
-    deinit {
+    isolated deinit {
         beepTimer?.invalidate()
         beepTimer = nil
         NotificationCenter.default.removeObserver(self)
+        player.stop()
     }
 }

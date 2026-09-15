@@ -34,6 +34,19 @@ final class AppModelBreakTests: XCTestCase {
         func schedule(after interval: TimeInterval, _ tick: @escaping @Sendable () -> Void) {}
         func cancel() {}
     }
+    private final class ManualAlarmActionScheduler: ExpiryAlarmActionScheduling {
+        private var pendingAction: (@MainActor @Sendable () async -> Void)?
+
+        func schedule(_ action: @escaping @MainActor @Sendable () async -> Void) {
+            pendingAction = action
+        }
+
+        func fire() async {
+            let action = pendingAction
+            pendingAction = nil
+            await action?()
+        }
+    }
 
     private final class FocusProbe { var isActive = true }
     private final class BeepCounter { var count = 0 }
@@ -60,6 +73,7 @@ final class AppModelBreakTests: XCTestCase {
     private var clock: FakeClock!
     private var focusProbe: FocusProbe!
     private var beeps: BeepCounter!
+    private var alarmActionScheduler: ManualAlarmActionScheduler!
 
     override func setUpWithError() throws {
         try super.setUpWithError()
@@ -74,6 +88,7 @@ final class AppModelBreakTests: XCTestCase {
         clock = FakeClock()
         focusProbe = FocusProbe()
         beeps = BeepCounter()
+        alarmActionScheduler = ManualAlarmActionScheduler()
     }
 
     override func tearDownWithError() throws {
@@ -118,7 +133,8 @@ final class AppModelBreakTests: XCTestCase {
         let model = AppModel(
             settings: settings, persistenceDirectory: persistenceDirectory,
             scheduler: ManualTickScheduler(), sessionClock: clock,
-            expiryAlarm: alarm)
+            expiryAlarm: alarm,
+            expiryAlarmActionScheduler: alarmActionScheduler)
         await model.bootstrap()
         return model
     }
@@ -418,9 +434,7 @@ final class AppModelBreakTests: XCTestCase {
         focusProbe.isActive = true
         NotificationCenter.default.post(
             name: NSApplication.didBecomeActiveNotification, object: nil)
-        for _ in 0..<100 where model.isBreakActive {
-            try await Task.sleep(for: .milliseconds(10))
-        }
+        await alarmActionScheduler.fire()
 
         XCTAssertFalse(model.isExpiryAlarmActive)
         XCTAssertFalse(model.isBreakActive)
