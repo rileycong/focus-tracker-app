@@ -23,6 +23,7 @@
 		2F61C905039BEBA16715711A /* MiniTimerPanelController.swift in Sources */ = {isa = PBXBuildFile; fileRef = D335BCE52B9EEF442F53641B /* MiniTimerPanelController.swift */; };
 		32B8B1F2B438D38E619C2B2E /* TimerDisplay.swift in Sources */ = {isa = PBXBuildFile; fileRef = 97B40F0E34CCC987921482F9 /* TimerDisplay.swift */; };
 		335FFAE1E20D5816ACF0D335 /* FrontmatterSplitter.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9E370EA1340964AFF7C24132 /* FrontmatterSplitter.swift */; };
+		33EA16E6F3F141BC8EC0638C /* RecoveryPromptView.swift in Sources */ = {isa = PBXBuildFile; fileRef = C6747EB283EE544FF7E71320 /* RecoveryPromptView.swift */; };
 		36AA785F718AEE079885A7CE /* AppModelEndOfSessionTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B015AD3C715AB5F42EB44E61 /* AppModelEndOfSessionTests.swift */; };
 		3A098D5B937DDC987B89BC9D /* VaultStructureValidator.swift in Sources */ = {isa = PBXBuildFile; fileRef = B9317D0CAB0CD1E41F943A28 /* VaultStructureValidator.swift */; };
 		3A9B3456961A1A40FDFFF2DF /* SubtaskRowView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 23D3CA44358D0A95F097A01B /* SubtaskRowView.swift */; };
@@ -36,6 +37,7 @@
 		4A31461E0538DB93A092BA40 /* VaultStructureValidatorTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 64C87806167E963A7D11D916 /* VaultStructureValidatorTests.swift */; };
 		4A6D67334A0E9AC55CBF51E8 /* EndOfSessionFormState.swift in Sources */ = {isa = PBXBuildFile; fileRef = BD9179D2909498220C214EE0 /* EndOfSessionFormState.swift */; };
 		4C28161E12A283C0F7DF33E6 /* AppModelMiniTimerEpochTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5FEA6A7576E048D889E55C19 /* AppModelMiniTimerEpochTests.swift */; };
+		4C3F15EB47BC04AF06081091 /* DesignTokensTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = E6F8074A2B67FDEFE43EB311 /* DesignTokensTests.swift */; };
 		4CA8116552D030F08BFE1FC9 /* TimerDisplayTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = DD420083F379F54961F244ED /* TimerDisplayTests.swift */; };
 		4CE0485DD586E39C8634CEB9 /* MiniTimerView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 33016951FE75D4AE77E4F634 /* MiniTimerView.swift */; };
 		4DD7512AF2018D0642E67299 /* TaskFormState.swift in Sources */ = {isa = PBXBuildFile; fileRef = 445B3D8CCF237E3DFFE44208 /* TaskFormState.swift */; };
@@ -46,6 +48,7 @@
 		5811C92D98367DEC729F7EA1 /* VaultStoreTransitionTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B0C967C88404484608223706 /* VaultStoreTransitionTests.swift */; };
 		5B9474F55B192E0B830E412A /* CollapseStateStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 554340F5DF6E15C777FD9264 /* CollapseStateStore.swift */; };
 		5C40816107FF2F8EF9A813F3 /* SmokeTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2FD6B094AE292E2B2CFE2055 /* SmokeTests.swift */; };
+		5F5FDD3A63E228673EA9FA93 /* MiniTimerPresentationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F03374EC4BF919CE4D0C70F3 /* MiniTimerPresentationTests.swift */; };
 		60C1AF42B5D52D3E66DD88D3 /* DailyLogStoreTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B67859164CAD39CDD96B1736 /* DailyLogStoreTests.swift */; };
 		6211BEFA7AD4058D778A4367 /* FormDeadline.swift in Sources */ = {isa = PBXBuildFile; fileRef = 09F3B221E5E24A84E3AD2F8D /* FormDeadline.swift */; };
 		637271F24F8DCCFC153B40B0 /* StatusTransition.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5F0BA521BD58A62A830A1C10 /* StatusTransition.swift */; };
@@ -82,6 +85,7 @@
 		A1E505587320816E1751A947 /* DailyLogCodecTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6BD9E9056155C2B82893EDA6 /* DailyLogCodecTests.swift */; };
 		A2D29C602F9E8EA203B7F195 /* FocusSessionEngineRestoreTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 24A3DA2388BD777EAF1836D5 /* FocusSessionEngineRestoreTests.swift */; };
 		A2DCE257E978CD6BAFAE2168 /* AtomicFileWriterTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = DDB02A5B746D6AFFE94F389F /* AtomicFileWriterTests.swift */; };
+		A32BEDCFC8619C6ABE44CBB8 /* AppModelRecoveryPromptTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = E08D0B81C2C2D7D49E0B7824 /* AppModelRecoveryPromptTests.swift */; };
 		AA7EAE384FB2648424CDEEE6 /* FocusSessionEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = CB4718DB3F7149B1C3A2C2F9 /* FocusSessionEngine.swift */; };
 		ACAE813FA210879E32A17019 /* AppModelExpiryAlarmTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C103CFE5747B8132396472E0 /* AppModelExpiryAlarmTests.swift */; };
 		AF1A8B372A19186ED24BC4D0 /* AppSettingsTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B742C07982F82625A0329387 /* AppSettingsTests.swift */; };
@@ -107,6 +111,7 @@
 		DCDFB50E7152BF60B08454D3 /* DailyLogCodec.swift in Sources */ = {isa = PBXBuildFile; fileRef = CD099DA3072484B67CFDD3A0 /* DailyLogCodec.swift */; };
 		DD3059D76B8BCB53D62C954E /* ExpiryAlarmController.swift in Sources */ = {isa = PBXBuildFile; fileRef = FB7CA3AD42DF0E4FD3808B5D /* ExpiryAlarmController.swift */; };
 		DF5EA0555990FD6FC645C434 /* VaultStoreTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 28BA6F82E572C982197E1959 /* VaultStoreTests.swift */; };
+		F26F35B5CC011F3FDC276B82 /* AutoCollapseDemo.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4E687188E43D05170E11C259 /* AutoCollapseDemo.swift */; };
 		F8D548D3A1E6FE56E6A38A7C /* ActiveSessionRecovery.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6B9823987C7DB9B22004C48A /* ActiveSessionRecovery.swift */; };
 		F9A45B20373B4F1164258AE6 /* ActiveSessionPersistenceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AF4D3CFB0FB6AD76903E3A3E /* ActiveSessionPersistenceTests.swift */; };
 		FA85D7377CBF918F7941F4ED /* ActiveSessionPersistence.swift in Sources */ = {isa = PBXBuildFile; fileRef = 173E587312DA52F8A9B8EA05 /* ActiveSessionPersistence.swift */; };
@@ -161,6 +166,7 @@
 		449D8FADD940BEE8778B592B /* DailyLogDay.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DailyLogDay.swift; sourceTree = "<group>"; };
 		496B467448E0EBB4F9699080 /* FrontmatterEncoder.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FrontmatterEncoder.swift; sourceTree = "<group>"; };
 		4D5486D7E5950BEA4B04343F /* FrontmatterCodecTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FrontmatterCodecTests.swift; sourceTree = "<group>"; };
+		4E687188E43D05170E11C259 /* AutoCollapseDemo.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AutoCollapseDemo.swift; sourceTree = "<group>"; };
 		50426A6786DDC31102CF1E2C /* SessionStartView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SessionStartView.swift; sourceTree = "<group>"; };
 		52A6B2C67AE475FD9E4BC82F /* SystemTickScheduler.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SystemTickScheduler.swift; sourceTree = "<group>"; };
 		554340F5DF6E15C777FD9264 /* CollapseStateStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CollapseStateStore.swift; sourceTree = "<group>"; };
@@ -210,6 +216,7 @@
 		C0EE256B8BBE3676D2BA48CB /* MiniTimerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MiniTimerTests.swift; sourceTree = "<group>"; };
 		C103CFE5747B8132396472E0 /* AppModelExpiryAlarmTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppModelExpiryAlarmTests.swift; sourceTree = "<group>"; };
 		C636366981320C04C59B9646 /* TaskFormStateTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TaskFormStateTests.swift; sourceTree = "<group>"; };
+		C6747EB283EE544FF7E71320 /* RecoveryPromptView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RecoveryPromptView.swift; sourceTree = "<group>"; };
 		C76EB463C7C44B3BA54CD43C /* TaskItem.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TaskItem.swift; sourceTree = "<group>"; };
 		CB4718DB3F7149B1C3A2C2F9 /* FocusSessionEngine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FocusSessionEngine.swift; sourceTree = "<group>"; };
 		CC314814C11C5505C487CE03 /* TasksGrouping.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TasksGrouping.swift; sourceTree = "<group>"; };
@@ -226,9 +233,12 @@
 		DD420083F379F54961F244ED /* TimerDisplayTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TimerDisplayTests.swift; sourceTree = "<group>"; };
 		DDB02A5B746D6AFFE94F389F /* AtomicFileWriterTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AtomicFileWriterTests.swift; sourceTree = "<group>"; };
 		E006F9A7ACDDDAFFF7AFB593 /* AppModelVaultCreationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppModelVaultCreationTests.swift; sourceTree = "<group>"; };
+		E08D0B81C2C2D7D49E0B7824 /* AppModelRecoveryPromptTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppModelRecoveryPromptTests.swift; sourceTree = "<group>"; };
 		E0BA7BF8D84B73D94EF3157C /* AtomicFileWriterError.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AtomicFileWriterError.swift; sourceTree = "<group>"; };
 		E0CE5BEA0D95F2D356A98AB3 /* Project.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Project.swift; sourceTree = "<group>"; };
+		E6F8074A2B67FDEFE43EB311 /* DesignTokensTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DesignTokensTests.swift; sourceTree = "<group>"; };
 		ED156E35E718B893DF3B1E29 /* FocusSessionEngineTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FocusSessionEngineTests.swift; sourceTree = "<group>"; };
+		F03374EC4BF919CE4D0C70F3 /* MiniTimerPresentationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MiniTimerPresentationTests.swift; sourceTree = "<group>"; };
 		F15748CCF586FA0EDEE2F61F /* DailyLogError.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DailyLogError.swift; sourceTree = "<group>"; };
 		F2263127664569F0F7194904 /* VaultStoreError.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VaultStoreError.swift; sourceTree = "<group>"; };
 		F64F2B847F2F64F2D070FE92 /* TaskModelTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TaskModelTests.swift; sourceTree = "<group>"; };
@@ -292,6 +302,7 @@
 				33016951FE75D4AE77E4F634 /* MiniTimerView.swift */,
 				7ED7BD7DA0425018A2C1F738 /* OnboardingView.swift */,
 				254D4B9E861080B434AA4744 /* PostSessionChoiceView.swift */,
+				C6747EB283EE544FF7E71320 /* RecoveryPromptView.swift */,
 				B9249EF02B6E6EC374001EB0 /* ReorderArithmetic.swift */,
 				ACB88CC89F0C4E13A30792F1 /* RowDropDelegate.swift */,
 				5A91EAC12B02FAB3678FCD99 /* SessionStartPicker.swift */,
@@ -368,6 +379,7 @@
 				B015AD3C715AB5F42EB44E61 /* AppModelEndOfSessionTests.swift */,
 				C103CFE5747B8132396472E0 /* AppModelExpiryAlarmTests.swift */,
 				5FEA6A7576E048D889E55C19 /* AppModelMiniTimerEpochTests.swift */,
+				E08D0B81C2C2D7D49E0B7824 /* AppModelRecoveryPromptTests.swift */,
 				681606B16406FD9CC58C5181 /* AppModelReorderTests.swift */,
 				8C53407EA932C7CBD09569EF /* AppModelSessionStartRoutingTests.swift */,
 				249524565EF81FA11176ADB8 /* AppModelSessionStartTests.swift */,
@@ -380,11 +392,13 @@
 				826D4C1D1D0E473A710B58A5 /* BreakTimerEngineTests.swift */,
 				6BD9E9056155C2B82893EDA6 /* DailyLogCodecTests.swift */,
 				B67859164CAD39CDD96B1736 /* DailyLogStoreTests.swift */,
+				E6F8074A2B67FDEFE43EB311 /* DesignTokensTests.swift */,
 				8BF05EF77B0C31CF49C81DE8 /* EndOfSessionFormStateTests.swift */,
 				093E010238901B4A8C04AF3A /* ExpiryAlarmControllerTests.swift */,
 				24A3DA2388BD777EAF1836D5 /* FocusSessionEngineRestoreTests.swift */,
 				ED156E35E718B893DF3B1E29 /* FocusSessionEngineTests.swift */,
 				4D5486D7E5950BEA4B04343F /* FrontmatterCodecTests.swift */,
+				F03374EC4BF919CE4D0C70F3 /* MiniTimerPresentationTests.swift */,
 				C0EE256B8BBE3676D2BA48CB /* MiniTimerTests.swift */,
 				288E80B1F8ECF8FFB96F742B /* ReorderArithmeticTests.swift */,
 				A2DF75F315AD1FD8E4624B20 /* SessionStartPickerTests.swift */,
@@ -410,6 +424,7 @@
 			children = (
 				D661E8DE9DDA5E5D7B4F8D45 /* AppModel.swift */,
 				DCB77F69D38C6F6744551E0E /* AppSettings.swift */,
+				4E687188E43D05170E11C259 /* AutoCollapseDemo.swift */,
 				FB7CA3AD42DF0E4FD3808B5D /* ExpiryAlarmController.swift */,
 				D335BCE52B9EEF442F53641B /* MiniTimerPanelController.swift */,
 				52A6B2C67AE475FD9E4BC82F /* SystemTickScheduler.swift */,
@@ -559,6 +574,7 @@
 				36AA785F718AEE079885A7CE /* AppModelEndOfSessionTests.swift in Sources */,
 				ACAE813FA210879E32A17019 /* AppModelExpiryAlarmTests.swift in Sources */,
 				4C28161E12A283C0F7DF33E6 /* AppModelMiniTimerEpochTests.swift in Sources */,
+				A32BEDCFC8619C6ABE44CBB8 /* AppModelRecoveryPromptTests.swift in Sources */,
 				2E5C41BE3B9D53099472C195 /* AppModelReorderTests.swift in Sources */,
 				B8AEE35BCA094F63E928B1DE /* AppModelSessionStartRoutingTests.swift in Sources */,
 				B433D6B457362EA7A919B673 /* AppModelSessionStartTests.swift in Sources */,
@@ -571,11 +587,13 @@
 				DA1D15E6EE8197B0A143628B /* BreakTimerEngineTests.swift in Sources */,
 				A1E505587320816E1751A947 /* DailyLogCodecTests.swift in Sources */,
 				60C1AF42B5D52D3E66DD88D3 /* DailyLogStoreTests.swift in Sources */,
+				4C3F15EB47BC04AF06081091 /* DesignTokensTests.swift in Sources */,
 				FADA71C8EDB65FD2DC6E5FDF /* EndOfSessionFormStateTests.swift in Sources */,
 				CA6022D04B08CF565FC9C4CC /* ExpiryAlarmControllerTests.swift in Sources */,
 				A2D29C602F9E8EA203B7F195 /* FocusSessionEngineRestoreTests.swift in Sources */,
 				64A3DACB834DD689B2881F95 /* FocusSessionEngineTests.swift in Sources */,
 				13CF5781F461AD63F5372CA9 /* FrontmatterCodecTests.swift in Sources */,
+				5F5FDD3A63E228673EA9FA93 /* MiniTimerPresentationTests.swift in Sources */,
 				4FF4F95E61A2D0A30B225E88 /* MiniTimerTests.swift in Sources */,
 				72ED11C50FA6C2296E9C52A1 /* ReorderArithmeticTests.swift in Sources */,
 				8835289EDE0ED23993EB5087 /* SessionStartPickerTests.swift in Sources */,
@@ -607,6 +625,7 @@
 				79E780DF2512D06E1F8CD03B /* AppSettings.swift in Sources */,
 				B9E22BF26DE00534CA7CE529 /* AtomicFileWriter.swift in Sources */,
 				C71E057857B6BCB5BF0CA4DA /* AtomicFileWriterError.swift in Sources */,
+				F26F35B5CC011F3FDC276B82 /* AutoCollapseDemo.swift in Sources */,
 				3D0BD19FB6B7D674DA97EB7D /* BreakLog.swift in Sources */,
 				459A582303927A76F5232ACC /* BreakTimerEngine.swift in Sources */,
 				7A96D25DEA2A230ADC85B45C /* BreakView.swift in Sources */,
@@ -634,6 +653,7 @@
 				FEC36812A2FF725735EA9B15 /* OnboardingView.swift in Sources */,
 				2A9EB76D2D7C75B7B6DE142C /* PostSessionChoiceView.swift in Sources */,
 				FB83696C4D6A3A0A58D84EB1 /* Project.swift in Sources */,
+				33EA16E6F3F141BC8EC0638C /* RecoveryPromptView.swift in Sources */,
 				A15EA4D9DB7CC99EBBB10546 /* ReorderArithmetic.swift in Sources */,
 				7F0EF9B239F60966FEDB98A1 /* RowDropDelegate.swift in Sources */,
 				6B053AD2A610ADCBB365BA39 /* SessionStartPicker.swift in Sources */,
