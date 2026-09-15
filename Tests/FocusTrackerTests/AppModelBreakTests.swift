@@ -1,4 +1,5 @@
 import XCTest
+import AppKit
 @testable import FocusTracker
 
 // File-local aliases keep the #23 nested-type assertions readable.
@@ -34,6 +35,9 @@ final class AppModelBreakTests: XCTestCase {
         func cancel() {}
     }
 
+    private final class FocusProbe { var isActive = true }
+    private final class BeepCounter { var count = 0 }
+
     // MARK: - Fixture access
 
     private static let fixturesVault = URL(fileURLWithPath: #filePath)
@@ -48,6 +52,8 @@ final class AppModelBreakTests: XCTestCase {
     private var suiteName: String!
     private var settings: AppSettings!
     private var clock: FakeClock!
+    private var focusProbe: FocusProbe!
+    private var beeps: BeepCounter!
 
     override func setUpWithError() throws {
         try super.setUpWithError()
@@ -60,6 +66,8 @@ final class AppModelBreakTests: XCTestCase {
         suiteName = "AppModelBreakTests-\(UUID().uuidString)"
         settings = try AppSettings(suiteName: suiteName)
         clock = FakeClock()
+        focusProbe = FocusProbe()
+        beeps = BeepCounter()
     }
 
     override func tearDownWithError() throws {
@@ -96,9 +104,14 @@ final class AppModelBreakTests: XCTestCase {
 
     private func makeConfiguredModel() async -> AppModel {
         settings.vaultPath = vaultURL.path(percentEncoded: false)
+        let probe = focusProbe!
+        let counter = beeps!
+        let alarm = ExpiryAlarmController(
+            beep: { counter.count += 1 }, isAppActive: { probe.isActive })
         let model = AppModel(
             settings: settings, persistenceDirectory: persistenceDirectory,
-            scheduler: ManualTickScheduler(), sessionClock: clock)
+            scheduler: ManualTickScheduler(), sessionClock: clock,
+            expiryAlarm: alarm)
         await model.bootstrap()
         return model
     }
@@ -217,6 +230,23 @@ final class AppModelBreakTests: XCTestCase {
         XCTAssertEqual(day.breaks, [])
     }
 
+    func testBackToTasksAfterSuccessRoutesWithoutWrites() async throws {
+        let taskID = UUID()
+        try writeTaskFile("Back success task", id: taskID, in: vaultURL)
+        let model = await makeConfiguredModel()
+        let result = try await runSessionToChoice(on: model, taskID: taskID)
+        let logURL = vaultURL.appendingPathComponent("Logs", isDirectory: true)
+            .appendingPathComponent(DailyLogDay.fileName(for: result.endedAt))
+        let before = try Data(contentsOf: logURL)
+
+        model.chooseBackToTasks()
+
+        XCTAssertEqual(model.appPhase, .tasksView)
+        XCTAssertFalse(model.isSessionActive)
+        XCTAssertFalse(model.isBreakActive)
+        XCTAssertEqual(try Data(contentsOf: logURL), before, "navigation performs no write")
+    }
+
     // MARK: - Choice after the partial outcome, NOT after log failure
     // (criteria 1 + 3)
 
@@ -282,6 +312,15 @@ final class AppModelBreakTests: XCTestCase {
                 completionFailure: .vaultChangedExternally(
                     id: partialTaskID, fileName: "Choice partial task.md")),
             "the partial path stops at the choice with the warning payload")
+
+        let logURL = vaultURL.appendingPathComponent("Logs", isDirectory: true)
+            .appendingPathComponent(DailyLogDay.fileName(for: clock.wallClockNow))
+        let beforeBack = try Data(contentsOf: logURL)
+        model.chooseBackToTasks()
+        XCTAssertEqual(model.appPhase, .tasksView)
+        XCTAssertEqual(
+            try Data(contentsOf: logURL), beforeBack,
+            "Back to Tasks after completionFailedAfterLog performs no extra write")
     }
 
     // MARK: - Break lifecycle: custom duration → expiry → path back
@@ -334,6 +373,58 @@ final class AppModelBreakTests: XCTestCase {
         XCTAssertEqual(
             parsed.endedAt.timeIntervalSince(parsed.startedAt), 120, accuracy: 1e-9,
             "ended_at − started_at == duration exactly (the #11 invariant)")
+    }
+
+    func testFocusedBreakExpiryKeepsBannerPathWithoutAlarm() async throws {
+        let taskID = UUID()
+        try writeTaskFile("Focused break task", id: taskID, in: vaultURL)
+        let model = await makeConfiguredModel()
+        _ = try await runSessionToChoice(on: model, taskID: taskID)
+        try model.takeBreak(duration: 60)
+        focusProbe.isActive = true
+
+        clock.advance(by: 60)
+        model.evaluateBreakExpiry()
+
+        XCTAssertTrue(model.isBreakExpired)
+        XCTAssertTrue(model.isBreakActive, "focused expiry keeps the in-app banner path")
+        XCTAssertEqual(model.appPhase, .breakActive)
+        XCTAssertFalse(model.isExpiryAlarmActive)
+        XCTAssertEqual(beeps.count, 0)
+    }
+
+    func testUnfocusedBreakExpiryAlarmsThenFocusBackLogsExpiryAndRoutes() async throws {
+        let taskID = UUID()
+        try writeTaskFile("Alarm break task", id: taskID, in: vaultURL)
+        let model = await makeConfiguredModel()
+        _ = try await runSessionToChoice(on: model, taskID: taskID)
+        try model.takeBreak(duration: 120)
+        focusProbe.isActive = false
+
+        clock.advance(by: 130)
+        model.evaluateBreakExpiry()
+        XCTAssertTrue(model.isExpiryAlarmActive)
+        XCTAssertEqual(beeps.count, 1, "the shared controller beeps immediately")
+        XCTAssertEqual(model.appPhase, .breakActive)
+
+        clock.advance(by: 90)
+        focusProbe.isActive = true
+        NotificationCenter.default.post(
+            name: NSApplication.didBecomeActiveNotification, object: nil)
+        for _ in 0..<100 where model.isBreakActive {
+            try await Task.sleep(for: .milliseconds(10))
+        }
+
+        XCTAssertFalse(model.isExpiryAlarmActive)
+        XCTAssertFalse(model.isBreakActive)
+        XCTAssertEqual(model.appPhase, .sessionStart)
+        let store = DailyLogStore(vaultURL: vaultURL)
+        let day = try await store.readDay(for: clock.wallClockNow)
+        let logged = try XCTUnwrap(day.breaks.last)
+        XCTAssertEqual(logged.duration, 2)
+        XCTAssertEqual(
+            logged.endedAt.timeIntervalSince(logged.startedAt), 120, accuracy: 1e-9,
+            "focus-back delay is excluded; ended_at is the expiry instant")
     }
 
     // MARK: - End break early (criterion 14: the actual shorter duration)

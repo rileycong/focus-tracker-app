@@ -1,8 +1,9 @@
 import AppKit
 
-/// The expiry alarm of issue #33: repeated system beeps (~1×/s) plus the
-/// focus-back watch (`NSApplication.didBecomeActiveNotification`) that ends
-/// an expired session the instant the user clicks the app back.
+/// The shared expiry alarm of issues #33/#38: repeated system beeps (~1×/s)
+/// plus the focus-back watch (`NSApplication.didBecomeActiveNotification`).
+/// `AppModel` owns lifecycle dispatch: focus-session expiry enters the #22
+/// modal, while break expiry logs and routes to session start.
 ///
 /// # AppKit isolation (house pattern)
 /// This is the alarm's ONE AppKit seam — the system beep (`NSSound.beep()`,
@@ -83,7 +84,7 @@ public final class ExpiryAlarmController: NSObject {
     /// Delivered on start (true) and stop (false), on the main actor.
     public var onStateChange: ((Bool) -> Void)?
     /// Delivered exactly once per alarm, after the focus-back stop: the
-    /// model's signal to auto-end the expired session and present the modal.
+    /// model's signal to finish whichever expired lifecycle armed the alarm.
     public var onFocusBack: (() -> Void)?
 
     /// - Parameters:

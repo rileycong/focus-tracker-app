@@ -316,6 +316,28 @@ final class AppModelExpiryAlarmTests: XCTestCase {
         XCTAssertEqual(model.sessionState, .running)
     }
 
+    func testManualConfirmationPauseWinsExpiryTickUntilCancel() async throws {
+        let taskID = UUID()
+        try writeTaskFile("Expiry confirm race", id: taskID, in: vaultURL)
+        let model = await makeConfiguredModel()
+        let context = try await startRunningSession(
+            on: model, taskID: taskID, duration: 60)
+        focusProbe.isActive = true
+        clock.advance(by: 60)
+
+        XCTAssertTrue(model.beginEndSessionConfirmation())
+        model.evaluateSessionExpiry()
+        XCTAssertEqual(model.appPhase, .timerView(context))
+        XCTAssertEqual(model.sessionState, .paused)
+        XCTAssertFalse(model.isExpiryAlarmActive)
+
+        model.cancelEndSessionConfirmation()
+        XCTAssertEqual(model.sessionState, .running)
+        model.evaluateSessionExpiry()
+        XCTAssertEqual(model.sessionState, .idle, "expiry proceeds after confirmation cancel")
+        _ = try assertEndingPhase(model.appPhase, context: context)
+    }
+
     // MARK: - Log composition (ended_at = expiry instant, parse-back)
 
     func testAutoEndLogParsesBackWithExpiryEndedAtAndInvariantSafeMinutes() async throws {

@@ -56,6 +56,8 @@ import SwiftUI
 /// presentation showing the timer with the blocking
 /// end-of-session modal over it (the ONE presentation path, in the app
 /// shell). Submission returns the app to Tasks.
+/// Opening the confirmation first uses the same model-owned #38 pause as the
+/// full timer; Cancel conditionally resumes only a pause that flow created.
 ///
 /// # Expiry watch (issue #33)
 /// This view runs the same ~1 s `evaluateSessionExpiry()` watch loop as the
@@ -110,7 +112,7 @@ struct MiniTimerView: View {
             // the sync restores normal main-window presentation with
             // the end-of-session modal over the timer.
             Button("End Session", role: .destructive, action: endSession)
-            Button("Cancel", role: .cancel) {}
+            Button("Cancel", role: .cancel) { model.cancelEndSessionConfirmation() }
         } message: {
             Text(
                 "The session ends now. A short wrap-up form opens before the app returns to the tasks."
@@ -205,7 +207,9 @@ struct MiniTimerView: View {
                     systemImage: displayState().isPaused ? "play.fill" : "pause.fill")
             }
             Button(role: .destructive) {
-                showsEndConfirmation = true
+                if model.beginEndSessionConfirmation() {
+                    showsEndConfirmation = true
+                }
             } label: {
                 Label("End", systemImage: "stop.fill")
             }

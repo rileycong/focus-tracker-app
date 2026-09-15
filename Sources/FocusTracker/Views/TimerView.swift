@@ -18,7 +18,9 @@ import SwiftUI
 ///
 /// # End flow (issue #22, PRD §9.5, §12)
 /// The End Session control opens the minimal End/Cancel confirm (§9.5).
-/// Cancel continues the session: no end, no modal. Confirming runs the
+/// Opening it pauses a running session immediately through the model, making
+/// decision time real paused telemetry. Cancel resumes only that automatic
+/// pause (an already-paused session stays paused). Confirming runs the
 /// model's end flow — `AppModel.endSession()` ends the engine, retains the
 /// `FocusSessionResult` and swaps the phase to `.endingSession` — which
 /// opens the end-of-session modal over this timer. The modal is presented
@@ -160,7 +162,7 @@ struct TimerView: View {
             titleVisibility: .visible
         ) {
             Button("End Session", role: .destructive, action: endSession)
-            Button("Cancel", role: .cancel) {}
+            Button("Cancel", role: .cancel) { model.cancelEndSessionConfirmation() }
         } message: {
             Text(
                 "The session ends now. A short wrap-up form opens before the app returns to the tasks."
@@ -298,8 +300,12 @@ struct TimerView: View {
             // state itself is shown on the ring (dimming above).
             Button(displayState().isPaused ? "Resume" : "Pause") { togglePause() }
                 .buttonStyle(.bordered)
-            Button("End Session", role: .destructive) { showsEndConfirmation = true }
-                .buttonStyle(.bordered)
+            Button("End Session", role: .destructive) {
+                if model.beginEndSessionConfirmation() {
+                    showsEndConfirmation = true
+                }
+            }
+            .buttonStyle(.bordered)
         }
         .padding(.bottom, DesignTokens.spacingL)
     }

@@ -214,6 +214,49 @@ final class AppModelCancelEndOfSessionTests: XCTestCase {
 
     // MARK: - Confirm-End capture into the phase (issue #29)
 
+    func testManualEndConfirmationPausesFreezesAndRecordsDecisionTelemetry() async throws {
+        let taskID = UUID()
+        try writeTaskFile("Confirm pause task", id: taskID, in: vaultURL)
+        let model = await makeConfiguredModel()
+        _ = try await startRunningSession(on: model, taskID: taskID)
+        clock.advance(by: 600)
+
+        XCTAssertTrue(model.beginEndSessionConfirmation())
+        XCTAssertEqual(model.sessionState, .paused)
+        XCTAssertEqual(model.focusedSeconds, 600, accuracy: 1e-9)
+        clock.advance(by: 120)
+        XCTAssertEqual(model.focusedSeconds, 600, accuracy: 1e-9, "decision time is not focused")
+
+        let result = try model.endSession()
+        XCTAssertEqual(result.focusedDuration, 10)
+        XCTAssertEqual(result.pausedDuration, 2)
+        XCTAssertEqual(result.pauseCount, 1, "the automatic confirmation pause is telemetry")
+    }
+
+    func testCancelConfirmationConditionallyResumesOnlyItsOwnPause() async throws {
+        let taskID = UUID()
+        try writeTaskFile("Conditional resume task", id: taskID, in: vaultURL)
+        let model = await makeConfiguredModel()
+        _ = try await startRunningSession(on: model, taskID: taskID)
+
+        XCTAssertTrue(model.beginEndSessionConfirmation())
+        clock.advance(by: 30)
+        model.cancelEndSessionConfirmation()
+        XCTAssertEqual(model.sessionState, .running, "the flow resumes its automatic pause")
+        clock.advance(by: 30)
+        XCTAssertEqual(model.focusedSeconds, 30, accuracy: 1e-9)
+
+        try model.pauseSession()
+        XCTAssertTrue(model.beginEndSessionConfirmation())
+        clock.advance(by: 30)
+        model.cancelEndSessionConfirmation()
+        XCTAssertEqual(model.sessionState, .paused, "a pre-existing pause stays paused")
+        XCTAssertEqual(model.focusedSeconds, 30, accuracy: 1e-9)
+
+        let result = try model.endSession()
+        XCTAssertEqual(result.pauseCount, 2, "only the first confirmation added a pause")
+    }
+
     func testEndSessionCapturesEndInstantSnapshotIntoPhase() async throws {
         let taskID = UUID()
         try writeTaskFile("Capture task", id: taskID, in: vaultURL)

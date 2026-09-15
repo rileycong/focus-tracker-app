@@ -26,10 +26,11 @@ import SwiftUI
 /// IN-APP notification banner appears — keyed off the model's observable
 /// `isBreakExpired` state, re-read on every tick. NOT a system notification
 /// (no `UNUserNotificationCenter`). Engineer's choice (documented): a
-/// persistent banner under the ring with no sound and NO auto-dismiss — the
-/// break screen stays up until the user acts (no auto-start of a focus
-/// session, §14.3; §19 non-goals), so a banner that vanished on its own
-/// could be missed entirely.
+/// persistent banner under the ring with no sound and NO auto-dismiss. Issue
+/// #38 preserves that path when focused. When unfocused, the view's ~1 s
+/// watcher asks the model to start the shared #33 controller; the same subtle
+/// shake as the focus timer accompanies its beeps until focus-back, when the
+/// model ends/logs at the expiry instant and routes to `.sessionStart`.
 ///
 /// # Controls (issue #23 criteria 14/16)
 /// While the break runs: **End break early** — ends the break now and logs
@@ -42,6 +43,9 @@ struct BreakView: View {
     /// The composition root — the break passthroughs and the pinned
     /// `endBreak()` path.
     let model: AppModel
+
+    @State private var shakeOffset: CGFloat = 0
+    private static let shakeAmplitude: CGFloat = 4
 
     var body: some View {
         GeometryReader { geometry in
@@ -67,8 +71,26 @@ struct BreakView: View {
                 }
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .offset(x: shakeOffset)
+            .onChange(of: model.isExpiryAlarmActive) { _, alarming in
+                if alarming {
+                    withAnimation(
+                        .easeInOut(duration: 0.09).repeatForever(autoreverses: true)
+                    ) {
+                        shakeOffset = Self.shakeAmplitude
+                    }
+                } else {
+                    withAnimation(.easeInOut(duration: 0.2)) { shakeOffset = 0 }
+                }
+            }
         }
         .background(DesignTokens.background)
+        .task {
+            while !Task.isCancelled {
+                try? await Task.sleep(for: .seconds(1))
+                model.evaluateBreakExpiry()
+            }
+        }
     }
 
     // MARK: - Pieces
@@ -107,8 +129,7 @@ struct BreakView: View {
     }
 
     /// The in-app break-finished notification (criterion 15): a persistent
-    /// banner — no sound, no auto-dismiss, no auto-start (documented in the
-    /// type documentation).
+    /// banner for focused expiry — no sound or auto-dismiss on that path.
     private var expiryBanner: some View {
         Text("Break finished — head back when you're ready.")
             .font(DesignTokens.statusGroupFont)

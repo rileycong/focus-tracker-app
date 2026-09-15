@@ -2,7 +2,9 @@ import SwiftUI
 
 /// The minimal post-session choice (issue #23, PRD §14.1, §20.7): after the
 /// end-of-session modal is submitted, the flow stops here for the explicit
-/// choice — **Start Next Session** or **Take Break**. NOTHING auto-starts
+/// choice — **Start Next Session**, **Take Break**, or **Back to Tasks**.
+/// Back to Tasks is pure routing after either successful submission outcome;
+/// it starts and logs nothing. NOTHING auto-starts
 /// and NO break auto-begins (§14.1; §19 non-goals: automatic break start).
 /// Presented by the app shell's ONE phase-driven path for
 /// `AppPhase.postSessionChoice` (inline view — the engineer's choice
@@ -51,6 +53,10 @@ struct PostSessionChoiceView: View {
                 }
                 .buttonStyle(.borderedProminent)
                 breakSection
+                Button("Back to Tasks") {
+                    model.chooseBackToTasks()
+                }
+                .buttonStyle(.bordered)
             }
             if let failureText = breakStartFailure {
                 Text(failureText)

@@ -188,15 +188,26 @@ import Observation
 ///   reusing the existing same-window presentation sync. Compact mode itself
 ///   never shakes (documented engineer's choice).
 ///
+/// Issue #38 adds a model-owned manual-confirmation pause before the #22 end
+/// step. Opening End/Cancel pauses a running session immediately through the
+/// ordinary engine API, so decision time increments pause telemetry and is
+/// excluded from focused time. Cancel resumes only that automatic pause; a
+/// session already paused stays paused. The expiry watcher requires `.running`
+/// while this confirmation is open, so a same-tick #33 expiry cannot steal the
+/// flow: End retires the watcher, while Cancel resumes it and expiry may then
+/// proceed normally.
+///
 /// # Break flow (issue #23, PRD §14)
 /// The opt-in break behind the post-submission choice: `takeBreak(duration:)`
 /// starts a `BreakTimerEngine` (default 5 minutes, configured at the choice
 /// step before start only) and swaps the phase to `.breakActive`; the break
 /// view renders the countdown from the model's pure passthroughs and the
-/// `TimelineView` tick. Expiry is observable (`isBreakExpired`) and surfaces
-/// an IN-APP banner — no system notifications, no auto-dismiss, no
-/// auto-start. `endBreak()` serves both the End-break-early control and the
-/// post-expiry path back: engine end → `BreakLog` composed from the result →
+/// `TimelineView` tick. Focused expiry is observable (`isBreakExpired`) and
+/// surfaces the existing IN-APP banner. Issue #38 adds unfocused expiry via
+/// the SAME `ExpiryAlarmController` as #33: beep + shake until focus-back,
+/// then `endBreak()` runs. `endBreak()` serves the End-break-early control,
+/// the focused post-expiry acknowledgment, and that focus-back path: engine
+/// end → `BreakLog` composed from the result →
 /// `DailyLogStore.appendBreak` to the END day via `logDay(forEndedAt:)`
 /// reused AS-IS → `.sessionStart` in every outcome (#34 amendment — was:
 /// `.tasksView`). Log failure is NON-BLOCKING
@@ -655,8 +666,8 @@ public final class AppModel {
     /// (#23), and — the #34 amendment of #23's pinned exit — the choice's
     /// **Start Next Session** and every break end swap to `.sessionStart`
     /// (the session-start sheet, directly); only the sheet's Cancel
-    /// (`cancelSessionStart()`) and the #27 discard return to
-    /// `.tasksView`.
+    /// (`cancelSessionStart()`), #38's Back to Tasks choice, and the #27
+    /// discard return to `.tasksView`.
     public private(set) var appPhase: AppPhase = .tasksView
     /// Mini-mode flag (issue #21, PRD §10.2): true exactly while the main
     /// main window uses the always-on-top compact presentation. Pinned choice: a
@@ -682,12 +693,12 @@ public final class AppModel {
     /// Tasks view renders it as a dismissible banner (auto-expiring there);
     /// `dismissCompletionNotice()` clears it. nil = nothing to surface.
     public private(set) var completionNotice: CompletionNotice?
-    /// The #33 expiry-alarm flag: true exactly while the alarm controller
+    /// The shared #33/#38 expiry-alarm flag: true exactly while the controller
     /// is beeping (`ExpiryAlarmController.isAlarming`, mirrored here through
     /// its `onStateChange` callback so the observable layer drives the
-    /// shake animation). The alarm only runs while a session sits expired
-    /// with the app UNFOCUSED; it stops on focus-back (then the auto-end),
-    /// on any other session end (defensive), and on model teardown.
+    /// shake animation). It runs for an expired focus session or break while
+    /// the app is unfocused, then stops on focus-back before dispatching the
+    /// owning lifecycle's end path.
     public private(set) var isExpiryAlarmActive = false
     /// The task/subtask ID of the most recent successfully STARTED
     /// session (issue #34): recorded by `beginEngineSession` — the shared
@@ -760,7 +771,7 @@ public final class AppModel {
             self?.isExpiryAlarmActive = active
         }
         alarm.onFocusBack = { [weak self] in
-            self?.autoEndExpiredSession()
+            self?.handleExpiryAlarmFocusBack()
         }
         Self.initializationCount += 1
     }
@@ -1617,6 +1628,42 @@ public final class AppModel {
         sessionState = .running
     }
 
+    /// Opens the manual End/Cancel confirmation. A running session is paused
+    /// before the confirmation appears, so decision time is real paused
+    /// telemetry and never focused time. An already-paused session is left
+    /// alone; its Cancel must not resume it.
+    @discardableResult
+    public func beginEndSessionConfirmation() -> Bool {
+        guard case .timerView = appPhase, coordinator.isActive else { return false }
+        guard !isEndSessionConfirmationOpen else { return true }
+        isEndSessionConfirmationOpen = true
+        endConfirmationAutoPaused = sessionState == .running
+        if endConfirmationAutoPaused {
+            do {
+                try pauseSession()
+            } catch {
+                isEndSessionConfirmationOpen = false
+                endConfirmationAutoPaused = false
+                return false
+            }
+        }
+        return true
+    }
+
+    /// Cancels the manual end confirmation. Resume only when this exact flow
+    /// paused a previously-running session; a pre-existing pause stays paused.
+    public func cancelEndSessionConfirmation() {
+        guard isEndSessionConfirmationOpen else { return }
+        let shouldResume = endConfirmationAutoPaused
+        isEndSessionConfirmationOpen = false
+        endConfirmationAutoPaused = false
+        guard shouldResume, coordinator.isActive, sessionState == .paused else { return }
+        try? resumeSession()
+    }
+
+    private var isEndSessionConfirmationOpen = false
+    private var endConfirmationAutoPaused = false
+
     /// The confirm-End step of the end flow (issue #22, PRD §9.5 → §12;
     /// extended by issue #29): captures the end-instant snapshot FIRST — the
     /// coordinator's read-only `captureSnapshot()` passthrough, a pure engine
@@ -1653,6 +1700,9 @@ public final class AppModel {
         // the confirm lands before the next watcher tick. The watcher is
         // retired with the lifecycle (fresh sessions re-arm it).
         expiryAlarm.stop()
+        alarmPurpose = nil
+        isEndSessionConfirmationOpen = false
+        endConfirmationAutoPaused = false
         // Issue #29 pinned capture order: BEFORE coordinator.end() — after
         // end the engine is idle and capture returns nil. `FocusSessionResult`
         // carries neither the pause state nor the configured duration, so
@@ -1966,6 +2016,14 @@ public final class AppModel {
 
     private var expiryWatchState: ExpiryWatchState = .idle
 
+    /// Which lifecycle owns the one shared `ExpiryAlarmController`.
+    private enum AlarmPurpose {
+        case session
+        case breakTimer
+    }
+
+    private var alarmPurpose: AlarmPurpose?
+
     /// The watch state a RESTORED session resumes with (issue #33): a
     /// snapshot already at or past its configured duration is `.handled` —
     /// its expiry predates the restore and the user has explicitly chosen
@@ -2001,6 +2059,10 @@ public final class AppModel {
     public func evaluateSessionExpiry() {
         guard expiryWatchState == .watching else { return }
         guard coordinator.isActive else { return }
+        // A manual End confirmation pauses first. This prevents its decision
+        // window from racing the view-driven auto-expiry tick; Cancel resumes
+        // the watcher, while End retires it through the ordinary end path.
+        guard sessionState == .running else { return }
         guard coordinator.isExpired(at: sessionClock.monotonicSeconds) else {
             return
         }
@@ -2014,7 +2076,24 @@ public final class AppModel {
         } else {
             // Expiry while unfocused: alarm until the user focuses back.
             if isMiniTimerActive { restoreFromMiniTimer() }
+            alarmPurpose = .session
             expiryAlarm.start()
+        }
+    }
+
+    /// Dispatches the shared controller's focus-back signal to the lifecycle
+    /// that armed it. Session ending is synchronous; break ending reuses the
+    /// existing async append-and-route tail without forking alarm behavior.
+    private func handleExpiryAlarmFocusBack() {
+        let purpose = alarmPurpose
+        alarmPurpose = nil
+        switch purpose {
+        case .session:
+            autoEndExpiredSession()
+        case .breakTimer:
+            Task { await endBreak() }
+        case nil:
+            break
         }
     }
 
@@ -2068,6 +2147,7 @@ public final class AppModel {
     private func autoEndExpiredSession() {
         // Stop the alarm first (spec order; no-op when it never ran).
         expiryAlarm.stop()
+        alarmPurpose = nil
         guard case .timerView(let context) = appPhase else { return }
         // #29 pinned capture order: BEFORE coordinator.end().
         guard let endSnapshot = coordinator.captureSnapshot() else { return }
@@ -2142,6 +2222,11 @@ public final class AppModel {
     /// the break and logs nothing — the documented honest loss).
     private var breakEngine: BreakTimerEngine?
 
+    /// Exactly-once expiry detection for the current break. Focused expiry is
+    /// considered handled and keeps the existing banner path; unfocused
+    /// expiry arms the shared alarm until focus-back ends and logs the break.
+    private var isBreakExpiryWatching = false
+
     /// The small non-blocking warning surfaced after a break-log append
     /// failure (issue #23 criterion 18): rendered by the app shell as a
     /// small banner; the flow continues to `.sessionStart` either way
@@ -2194,6 +2279,7 @@ public final class AppModel {
         var engine = BreakTimerEngine(clock: sessionClock)
         try engine.start(duration: duration)
         breakEngine = engine
+        isBreakExpiryWatching = true
         pendingBreakLogWarning = nil
         appPhase = .breakActive
     }
@@ -2212,6 +2298,25 @@ public final class AppModel {
     public func chooseStartNextSession() {
         guard case .postSessionChoice = appPhase else { return }
         appPhase = .sessionStart
+    }
+
+    /// Leaves the post-session choice for Tasks. The session was already
+    /// logged before this phase, and this navigation performs no writes.
+    public func chooseBackToTasks() {
+        guard case .postSessionChoice = appPhase else { return }
+        appPhase = .tasksView
+    }
+
+    /// The break view's ~1 s watcher. Focused expiry remains on the existing
+    /// in-app banner with no sound; unfocused expiry starts the same bounded
+    /// alarm controller used by focus sessions.
+    public func evaluateBreakExpiry() {
+        guard isBreakExpiryWatching, breakEngine != nil else { return }
+        guard isBreakExpired else { return }
+        isBreakExpiryWatching = false
+        guard !expiryAlarm.isAppActive else { return }
+        alarmPurpose = .breakTimer
+        expiryAlarm.start()
     }
 
     /// Cancels the phase-driven session-start sheet (issue #34): back to
@@ -2268,6 +2373,9 @@ public final class AppModel {
             return nil
         }
         breakEngine = nil
+        isBreakExpiryWatching = false
+        expiryAlarm.stop()
+        alarmPurpose = nil
         let log = BreakLog(
             breakID: result.breakID,
             startedAt: result.startedAt,
