@@ -43,51 +43,24 @@ enum MiniTimerWindowLayout {
     }
 }
 
-/// Every property changed for compact mode. Keeping this as value state makes
-/// collapse/restore behavior testable without a second window or a panel.
+/// Only properties safe to change on a SwiftUI-owned window at runtime.
 struct MainWindowPresentationState: Equatable {
     var frame: CGRect
     var level: NSWindow.Level
-    var styleMask: NSWindow.StyleMask
     var contentMinSize: CGSize
     var contentMaxSize: CGSize
     var collectionBehavior: NSWindow.CollectionBehavior
-    var titleVisibility: NSWindow.TitleVisibility
-    var titlebarAppearsTransparent: Bool
     var isMovableByWindowBackground: Bool
-    var isOpaque: Bool
-    var backgroundColor: NSColor
-    var hasShadow: Bool
 
-    static func == (lhs: Self, rhs: Self) -> Bool {
-        lhs.frame == rhs.frame
-            && lhs.level == rhs.level
-            && lhs.styleMask == rhs.styleMask
-            && lhs.contentMinSize == rhs.contentMinSize
-            && lhs.contentMaxSize == rhs.contentMaxSize
-            && lhs.collectionBehavior == rhs.collectionBehavior
-            && lhs.titleVisibility == rhs.titleVisibility
-            && lhs.titlebarAppearsTransparent == rhs.titlebarAppearsTransparent
-            && lhs.isMovableByWindowBackground == rhs.isMovableByWindowBackground
-            && lhs.isOpaque == rhs.isOpaque
-            && lhs.backgroundColor.isEqual(rhs.backgroundColor)
-            && lhs.hasShadow == rhs.hasShadow
-    }
-
+    @MainActor
     static func capture(_ window: NSWindow) -> Self {
         Self(
             frame: window.frame,
             level: window.level,
-            styleMask: window.styleMask,
             contentMinSize: window.contentMinSize,
             contentMaxSize: window.contentMaxSize,
             collectionBehavior: window.collectionBehavior,
-            titleVisibility: window.titleVisibility,
-            titlebarAppearsTransparent: window.titlebarAppearsTransparent,
-            isMovableByWindowBackground: window.isMovableByWindowBackground,
-            isOpaque: window.isOpaque,
-            backgroundColor: window.backgroundColor,
-            hasShadow: window.hasShadow)
+            isMovableByWindowBackground: window.isMovableByWindowBackground)
     }
 }
 
@@ -107,16 +80,10 @@ struct MainWindowCompactTransition: Equatable {
         var compact = normal
         compact.frame = MiniTimerWindowLayout.defaultTopRightFrame(visibleFrame: visibleFrame)
         compact.level = .floating
-        compact.styleMask = [.borderless, .resizable]
         compact.contentMinSize = MiniTimerWindowLayout.contentMinSize
         compact.contentMaxSize = MiniTimerWindowLayout.contentMaxSize
         compact.collectionBehavior.formUnion([.canJoinAllSpaces, .fullScreenAuxiliary])
-        compact.titleVisibility = .hidden
-        compact.titlebarAppearsTransparent = true
         compact.isMovableByWindowBackground = true
-        compact.isOpaque = false
-        compact.backgroundColor = .clear
-        compact.hasShadow = true
         return Self(normal: normal, compact: compact, visibilityAction: .keepOnScreen)
     }
 }
@@ -125,7 +92,8 @@ struct MainWindowCompactTransition: Equatable {
 /// other `NSWindow` is created. Unlike the old swap, this path never orders
 /// out, miniaturizes, closes, or hides the app window. The reliability tradeoff
 /// is deliberate: because compact mode is the main window, clicking it may
-/// activate the app.
+/// activate the app. It never changes the scene-owned window's style mask or
+/// titlebar ownership; those remain fixed for the app's lifetime.
 @MainActor
 final class MainWindowPresentationController {
     private weak var window: NSWindow?
@@ -153,10 +121,9 @@ final class MainWindowPresentationController {
             let visibleFrame = window.screen?.visibleFrame
                 ?? NSScreen.main?.visibleFrame
                 ?? CGRect(x: 0, y: 0, width: 1440, height: 900)
-            apply(
-                MainWindowCompactTransition.collapse(
-                    from: normal, visibleFrame: visibleFrame).compact,
-                to: window)
+            let transition = MainWindowCompactTransition.collapse(
+                from: normal, visibleFrame: visibleFrame)
+            applyCompact(transition.compact, visibleFrame: visibleFrame, to: window)
         } else if let normalPresentation {
             apply(normalPresentation, to: window)
             self.normalPresentation = nil
@@ -164,18 +131,33 @@ final class MainWindowPresentationController {
     }
 
     private func apply(_ state: MainWindowPresentationState, to window: NSWindow) {
-        window.styleMask = state.styleMask
+        applyProperties(state, to: window)
+        window.setFrame(state.frame, display: true)
+    }
+
+    private func applyCompact(
+        _ state: MainWindowPresentationState,
+        visibleFrame: CGRect,
+        to window: NSWindow
+    ) {
+        applyProperties(state, to: window)
+        let chromeSize = CGSize(
+            width: window.frame.width - window.contentLayoutRect.width,
+            height: window.frame.height - window.contentLayoutRect.height)
+        let compactWindowSize = CGSize(
+            width: MiniTimerWindowLayout.contentSize.width + chromeSize.width,
+            height: MiniTimerWindowLayout.contentSize.height + chromeSize.height)
+        let frame = MiniTimerWindowLayout.defaultTopRightFrame(
+            visibleFrame: visibleFrame, contentSize: compactWindowSize)
+        window.setFrame(frame, display: true)
+    }
+
+    private func applyProperties(_ state: MainWindowPresentationState, to window: NSWindow) {
         window.level = state.level
         window.contentMinSize = state.contentMinSize
         window.contentMaxSize = state.contentMaxSize
         window.collectionBehavior = state.collectionBehavior
-        window.titleVisibility = state.titleVisibility
-        window.titlebarAppearsTransparent = state.titlebarAppearsTransparent
         window.isMovableByWindowBackground = state.isMovableByWindowBackground
-        window.isOpaque = state.isOpaque
-        window.backgroundColor = state.backgroundColor
-        window.hasShadow = state.hasShadow
-        window.setFrame(state.frame, display: true)
     }
 }
 

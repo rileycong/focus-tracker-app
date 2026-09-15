@@ -260,6 +260,11 @@ import Observation
 @Observable
 public final class AppModel {
 
+    /// Process-local lifecycle counters used by the issue #37 diagnostic
+    /// harness to detect scene-driven model recreation.
+    private(set) static var initializationCount = 0
+    private(set) static var bootstrapCount = 0
+
     // MARK: - Pinned configuration
 
     /// The pinned autosave interval (seconds) handed to the
@@ -757,6 +762,7 @@ public final class AppModel {
         alarm.onFocusBack = { [weak self] in
             self?.autoEndExpiredSession()
         }
+        Self.initializationCount += 1
     }
 
     // MARK: - Startup
@@ -769,6 +775,7 @@ public final class AppModel {
     /// model stays `.notConfigured` and no recovery is surfaced (per the
     /// issue, recovery runs on start with a *configured* vault).
     public func bootstrap() async {
+        Self.bootstrapCount += 1
         guard vaultURL != nil else {
             vaultState = .notConfigured
             return

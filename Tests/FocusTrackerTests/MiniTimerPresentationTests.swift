@@ -10,34 +10,23 @@ final class MiniTimerPresentationTests: XCTestCase {
         MainWindowPresentationState(
             frame: CGRect(x: 180, y: 140, width: 860, height: 620),
             level: .normal,
-            styleMask: [.titled, .closable, .miniaturizable, .resizable],
             contentMinSize: CGSize(width: 640, height: 420),
             contentMaxSize: CGSize(width: 1600, height: 1200),
             collectionBehavior: [.managed],
-            titleVisibility: .visible,
-            titlebarAppearsTransparent: false,
-            isMovableByWindowBackground: false,
-            isOpaque: true,
-            backgroundColor: .windowBackgroundColor,
-            hasShadow: true)
+            isMovableByWindowBackground: false)
     }
 
     private func makeWindow(from state: MainWindowPresentationState) -> NSWindow {
         let window = NSWindow(
             contentRect: state.frame,
-            styleMask: state.styleMask,
+            styleMask: [.titled, .closable, .miniaturizable, .resizable],
             backing: .buffered,
             defer: false)
         window.level = state.level
         window.contentMinSize = state.contentMinSize
         window.contentMaxSize = state.contentMaxSize
         window.collectionBehavior = state.collectionBehavior
-        window.titleVisibility = state.titleVisibility
-        window.titlebarAppearsTransparent = state.titlebarAppearsTransparent
         window.isMovableByWindowBackground = state.isMovableByWindowBackground
-        window.isOpaque = state.isOpaque
-        window.backgroundColor = state.backgroundColor
-        window.hasShadow = state.hasShadow
         window.setFrame(state.frame, display: false)
         return window
     }
@@ -53,7 +42,6 @@ final class MiniTimerPresentationTests: XCTestCase {
             transition.compact.frame,
             MiniTimerWindowLayout.defaultTopRightFrame(visibleFrame: visibleFrame))
         XCTAssertEqual(transition.compact.level, .floating)
-        XCTAssertEqual(transition.compact.styleMask, [.borderless, .resizable])
         XCTAssertEqual(transition.compact.contentMinSize, CGSize(width: 220, height: 104))
         XCTAssertEqual(transition.compact.contentMaxSize, CGSize(width: 520, height: 240))
         XCTAssertTrue(transition.compact.collectionBehavior.contains(.canJoinAllSpaces))
@@ -74,6 +62,9 @@ final class MiniTimerPresentationTests: XCTestCase {
         let window = makeWindow(from: expected)
         let identity = window.windowNumber
         let windowCount = NSApp.windows.count
+        let styleMask = window.styleMask
+        let titleVisibility = window.titleVisibility
+        let titlebarAppearsTransparent = window.titlebarAppearsTransparent
         let controller = MainWindowPresentationController()
         controller.attach(window)
 
@@ -82,7 +73,15 @@ final class MiniTimerPresentationTests: XCTestCase {
             controller.setCompact(true)
             XCTAssertEqual(window.windowNumber, identity, "cycle \(cycle): identity")
             XCTAssertEqual(window.level, .floating, "cycle \(cycle): floating")
+            XCTAssertEqual(
+                window.contentLayoutRect.size, MiniTimerWindowLayout.contentSize,
+                "cycle \(cycle): default compact content size")
             XCTAssertFalse(window.isMiniaturized, "cycle \(cycle): never minimized")
+            XCTAssertEqual(window.styleMask, styleMask, "cycle \(cycle): style ownership")
+            XCTAssertEqual(window.titleVisibility, titleVisibility, "cycle \(cycle): title")
+            XCTAssertEqual(
+                window.titlebarAppearsTransparent, titlebarAppearsTransparent,
+                "cycle \(cycle): titlebar ownership")
 
             controller.setCompact(false)
             controller.setCompact(false)
@@ -92,6 +91,22 @@ final class MiniTimerPresentationTests: XCTestCase {
         }
 
         XCTAssertEqual(NSApp.windows.count, windowCount, "no panel or second window created")
+    }
+
+    func testCompactTransitionNeverMutatesSwiftUIWindowStyleOrTitlebar() {
+        let window = makeWindow(from: makeNormalState())
+        window.titleVisibility = .visible
+        window.titlebarAppearsTransparent = false
+        let styleMask = window.styleMask
+        let controller = MainWindowPresentationController()
+        controller.attach(window)
+
+        controller.setCompact(true)
+        controller.setCompact(false)
+
+        XCTAssertEqual(window.styleMask, styleMask)
+        XCTAssertEqual(window.titleVisibility, .visible)
+        XCTAssertFalse(window.titlebarAppearsTransparent)
     }
 
     func testEndFromMiniRestoresNormalPresentation() {

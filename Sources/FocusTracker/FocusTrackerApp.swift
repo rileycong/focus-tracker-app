@@ -103,7 +103,10 @@ struct FocusTrackerApp: App {
                     syncWindowPresentation()
                 }
             }
-            .task { await model.bootstrap() }
+            .task {
+                await model.bootstrap()
+                await AutoCollapseDemo.runIfNeeded(model: model)
+            }
             .onChange(of: model.appPhase) { _, _ in syncWindowPresentation() }
             .onChange(of: model.isMiniTimerActive) { _, _ in syncWindowPresentation() }
             .preferredColorScheme(.dark)

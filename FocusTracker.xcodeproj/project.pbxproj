@@ -110,6 +110,7 @@
 		DCDFB50E7152BF60B08454D3 /* DailyLogCodec.swift in Sources */ = {isa = PBXBuildFile; fileRef = CD099DA3072484B67CFDD3A0 /* DailyLogCodec.swift */; };
 		DD3059D76B8BCB53D62C954E /* ExpiryAlarmController.swift in Sources */ = {isa = PBXBuildFile; fileRef = FB7CA3AD42DF0E4FD3808B5D /* ExpiryAlarmController.swift */; };
 		DF5EA0555990FD6FC645C434 /* VaultStoreTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 28BA6F82E572C982197E1959 /* VaultStoreTests.swift */; };
+		F26F35B5CC011F3FDC276B82 /* AutoCollapseDemo.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4E687188E43D05170E11C259 /* AutoCollapseDemo.swift */; };
 		F8D548D3A1E6FE56E6A38A7C /* ActiveSessionRecovery.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6B9823987C7DB9B22004C48A /* ActiveSessionRecovery.swift */; };
 		F9A45B20373B4F1164258AE6 /* ActiveSessionPersistenceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AF4D3CFB0FB6AD76903E3A3E /* ActiveSessionPersistenceTests.swift */; };
 		FA85D7377CBF918F7941F4ED /* ActiveSessionPersistence.swift in Sources */ = {isa = PBXBuildFile; fileRef = 173E587312DA52F8A9B8EA05 /* ActiveSessionPersistence.swift */; };
@@ -165,6 +166,7 @@
 		449D8FADD940BEE8778B592B /* DailyLogDay.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DailyLogDay.swift; sourceTree = "<group>"; };
 		496B467448E0EBB4F9699080 /* FrontmatterEncoder.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FrontmatterEncoder.swift; sourceTree = "<group>"; };
 		4D5486D7E5950BEA4B04343F /* FrontmatterCodecTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FrontmatterCodecTests.swift; sourceTree = "<group>"; };
+		4E687188E43D05170E11C259 /* AutoCollapseDemo.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AutoCollapseDemo.swift; sourceTree = "<group>"; };
 		50426A6786DDC31102CF1E2C /* SessionStartView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SessionStartView.swift; sourceTree = "<group>"; };
 		52A6B2C67AE475FD9E4BC82F /* SystemTickScheduler.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SystemTickScheduler.swift; sourceTree = "<group>"; };
 		554340F5DF6E15C777FD9264 /* CollapseStateStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CollapseStateStore.swift; sourceTree = "<group>"; };
@@ -419,6 +421,7 @@
 			children = (
 				D661E8DE9DDA5E5D7B4F8D45 /* AppModel.swift */,
 				DCB77F69D38C6F6744551E0E /* AppSettings.swift */,
+				4E687188E43D05170E11C259 /* AutoCollapseDemo.swift */,
 				FB7CA3AD42DF0E4FD3808B5D /* ExpiryAlarmController.swift */,
 				11E28A78C958D9C4613DBDB2 /* MainWindowPresentationController.swift */,
 				52A6B2C67AE475FD9E4BC82F /* SystemTickScheduler.swift */,
@@ -618,6 +621,7 @@
 				79E780DF2512D06E1F8CD03B /* AppSettings.swift in Sources */,
 				B9E22BF26DE00534CA7CE529 /* AtomicFileWriter.swift in Sources */,
 				C71E057857B6BCB5BF0CA4DA /* AtomicFileWriterError.swift in Sources */,
+				F26F35B5CC011F3FDC276B82 /* AutoCollapseDemo.swift in Sources */,
 				3D0BD19FB6B7D674DA97EB7D /* BreakLog.swift in Sources */,
 				459A582303927A76F5232ACC /* BreakTimerEngine.swift in Sources */,
 				7A96D25DEA2A230ADC85B45C /* BreakView.swift in Sources */,

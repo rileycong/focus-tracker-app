@@ -441,26 +441,24 @@ final class AppModelMiniTimerTests: XCTestCase {
         let model = await makeConfiguredModel()
         let context = try await startRunningSession(on: model, taskID: taskID)
         let remainingBefore = model.remainingSeconds
+        let identity = ObjectIdentifier(model)
+        let initializationCount = AppModel.initializationCount
+        let bootstrapCount = AppModel.bootstrapCount
 
-        model.collapseToMiniTimer()
-        XCTAssertTrue(model.isMiniTimerActive)
-        model.restoreFromMiniTimer()
+        for cycle in 1...3 {
+            model.collapseToMiniTimer()
+            XCTAssertTrue(model.isMiniTimerActive, "cycle \(cycle): compact")
+            model.restoreFromMiniTimer()
 
-        XCTAssertFalse(model.isMiniTimerActive, "mini flag off")
-        // The full `.timerView(context)` display is restored, phase
-        // consistent both ways, session untouched throughout the swap.
-        XCTAssertEqual(model.appPhase, .timerView(context))
-        XCTAssertEqual(model.sessionState, .running)
-        XCTAssertTrue(model.isSessionActive)
-        XCTAssertEqual(model.remainingSeconds, remainingBefore)
-
-        // A second collapse → restore cycle is equally clean.
-        model.collapseToMiniTimer()
-        XCTAssertTrue(model.isMiniTimerActive)
-        model.restoreFromMiniTimer()
-        XCTAssertFalse(model.isMiniTimerActive)
-        XCTAssertEqual(model.appPhase, .timerView(context))
-        XCTAssertEqual(model.sessionState, .running)
+            XCTAssertFalse(model.isMiniTimerActive, "cycle \(cycle): full")
+            XCTAssertEqual(model.appPhase, .timerView(context), "cycle \(cycle): no recovery")
+            XCTAssertEqual(model.sessionState, .running)
+            XCTAssertTrue(model.isSessionActive)
+            XCTAssertEqual(model.remainingSeconds, remainingBefore)
+            XCTAssertEqual(ObjectIdentifier(model), identity)
+            XCTAssertEqual(AppModel.initializationCount, initializationCount)
+            XCTAssertEqual(AppModel.bootstrapCount, bootstrapCount)
+        }
     }
 
     func testRestoreWhenNotCollapsedIsTypedNoOp() async throws {
