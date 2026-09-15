@@ -112,6 +112,24 @@ enum AutoCollapseDemo {
         model: AppModel, miniPanel: MiniTimerPanelController
     ) async {
         guard isEnabled else { return }
+        let eventMonitor = NSEvent.addLocalMonitorForEvents(
+            matching: [.leftMouseDown, .leftMouseUp]
+        ) { event in
+            log(
+                "mouse event type=\(event.type.rawValue) window=\(event.windowNumber)"
+                    + " mini=\(model.isMiniTimerActive)"
+                    + " epoch=\(model.miniTimerPresentationEpoch)")
+            DispatchQueue.main.async {
+                log(
+                    "mouse event completed type=\(event.type.rawValue)"
+                        + " mini=\(model.isMiniTimerActive)"
+                        + " epoch=\(model.miniTimerPresentationEpoch)")
+            }
+            return event
+        }
+        defer {
+            if let eventMonitor { NSEvent.removeMonitor(eventMonitor) }
+        }
         let arguments = ProcessInfo.processInfo.arguments
         if let index = arguments.firstIndex(of: logFileArgument),
             index + 1 < arguments.count
@@ -265,11 +283,19 @@ enum AutoCollapseDemo {
             snapshot(
                 "cycle \(cycle) post-collapse (panel should be on-screen)",
                 miniPanel: miniPanel)
-            log("cycle \(cycle): restoreFromMiniTimer()")
+            log("cycle \(cycle): restoreFromMiniTimer() (one explicit delivery)")
             model.restoreFromMiniTimer()
-            try? await Task.sleep(nanoseconds: 1_500_000_000)
+            let restoredEpoch = model.miniTimerPresentationEpoch
+            // Duplicate delivery must be idempotent, and the 3.5 s hold
+            // spans at least three presentation-watchdog reconciliations.
+            model.restoreFromMiniTimer()
+            log(
+                "cycle \(cycle): duplicate restore mini=\(model.isMiniTimerActive)"
+                    + " epoch=\(model.miniTimerPresentationEpoch)"
+                    + " unchanged=\(model.miniTimerPresentationEpoch == restoredEpoch)")
+            try? await Task.sleep(nanoseconds: 3_500_000_000)
             snapshot(
-                "cycle \(cycle) post-restore (main window should be back)",
+                "cycle \(cycle) post-restore +3.5s (full must remain stable)",
                 miniPanel: miniPanel)
         }
     }

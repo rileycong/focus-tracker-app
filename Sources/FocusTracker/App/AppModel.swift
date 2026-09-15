@@ -665,9 +665,11 @@ public final class AppModel {
     /// panel closes on a session end by any path). In-memory only — nothing
     /// is persisted (issue criterion 5: relaunch defaults to the full view).
     public private(set) var isMiniTimerActive = false
-    /// Mini-presentation epoch (issue #31): bumped on every ACCEPTED
-    /// collapse/restore request — including requests that do not change
-    /// `isMiniTimerActive` — and never otherwise. The app shell's sync keys
+    /// Mini-presentation epoch (issue #31): bumped on every accepted
+    /// collapse and every state-changing restore request. Repeated collapse
+    /// requests bump even when `isMiniTimerActive` is already true so a
+    /// missing panel can be repaired; duplicate restore delivery is an
+    /// idempotent no-op. The app shell's sync keys
     /// its `.onChange` on this counter instead of the flag, because a
     /// flag-edge-driven sync is a deadlock: a delivery can be lost or a
     /// panel torn down while the flag stays on, and the user's next Mini

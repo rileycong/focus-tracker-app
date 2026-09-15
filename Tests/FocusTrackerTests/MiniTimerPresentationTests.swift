@@ -167,6 +167,72 @@ final class MiniTimerPresentationTests: XCTestCase {
             MiniTimerPanelLayout.frameIsFullyOnScreen(frame, visibleFrames: []))
     }
 
+    // MARK: - Restore stability (the second-stage user repro)
+
+    func testRestoreRemainsFullAcrossReconcileTicksAndAllowsFreshCollapse() async throws {
+        let taskID = UUID()
+        try writeTaskFile("Alpha task", id: taskID)
+        let model = await makeConfiguredModel()
+        let context = try await startRunningSession(on: model, taskID: taskID)
+        let panel = MiniTimerPanelController(model: model)
+
+        for cycle in 1...3 {
+            model.collapseToMiniTimer()
+            // Present the real panel without ordering out XCTest's host
+            // window; production collapse-window ordering is covered by the
+            // harness and the existing termination-policy tests.
+            panel.show(context: context)
+            XCTAssertTrue(model.isMiniTimerActive, "cycle \(cycle): collapsed")
+            XCTAssertTrue(panel.hasLivePanel, "cycle \(cycle): panel presented")
+
+            model.restoreFromMiniTimer()
+            let restoredEpoch = model.miniTimerPresentationEpoch
+            MiniTimerPanelController.reconcilePresentation(model: model, panel: panel)
+            XCTAssertFalse(model.isMiniTimerActive, "cycle \(cycle): restored")
+            XCTAssertFalse(panel.hasLivePanel, "cycle \(cycle): panel dismissed")
+
+            // Repeated level-driven watchdog reconciliations must not replay
+            // a stale collapse after the explicit restore.
+            for tick in 1...3 {
+                MiniTimerPanelController.reconcilePresentation(model: model, panel: panel)
+                XCTAssertFalse(
+                    model.isMiniTimerActive,
+                    "cycle \(cycle), tick \(tick): full remains desired")
+                model.restoreFromMiniTimer()
+                XCTAssertEqual(
+                    model.miniTimerPresentationEpoch, restoredEpoch,
+                    "cycle \(cycle), tick \(tick): duplicate restore is idempotent")
+            }
+        }
+
+        model.collapseToMiniTimer()
+        panel.show(context: context)
+        XCTAssertTrue(model.isMiniTimerActive, "a fresh collapse still works")
+        XCTAssertTrue(panel.hasLivePanel, "the fresh mini panel is presented")
+        model.restoreFromMiniTimer()
+        MiniTimerPanelController.reconcilePresentation(model: model, panel: panel)
+    }
+
+    func testDuplicateRestoreDeliveryIsIdempotent() async throws {
+        let taskID = UUID()
+        try writeTaskFile("Alpha task", id: taskID)
+        let model = await makeConfiguredModel()
+        let context = try await startRunningSession(on: model, taskID: taskID)
+        let panel = MiniTimerPanelController(model: model)
+        model.collapseToMiniTimer()
+        panel.show(context: context)
+
+        model.restoreFromMiniTimer()
+        MiniTimerPanelController.reconcilePresentation(model: model, panel: panel)
+        let epoch = model.miniTimerPresentationEpoch
+        model.restoreFromMiniTimer()
+        MiniTimerPanelController.reconcilePresentation(model: model, panel: panel)
+
+        XCTAssertFalse(model.isMiniTimerActive)
+        XCTAssertEqual(model.miniTimerPresentationEpoch, epoch)
+        XCTAssertFalse(panel.hasLivePanel)
+    }
+
     // MARK: - Post-end stale clicks (the 84129 stuck-state forensics)
 
     func testCollapseAfterSessionEndedIsRefusedWithoutEpochBump() async throws {

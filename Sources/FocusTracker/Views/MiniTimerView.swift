@@ -191,7 +191,7 @@ struct MiniTimerView: View {
             }
         }
         .contentShape(Rectangle())
-        .onTapGesture { model.restoreFromMiniTimer() }
+        .onTapGesture(perform: restoreFullTimer)
     }
 
     private var controls: some View {
@@ -213,7 +213,7 @@ struct MiniTimerView: View {
             // Dedicated restore affordance (issue #21 criterion 3) alongside
             // the click-to-restore display area.
             Button {
-                model.restoreFromMiniTimer()
+                restoreFullTimer()
             } label: {
                 Image(systemName: "arrow.down.right.and.arrow.up.left")
             }
@@ -236,6 +236,13 @@ struct MiniTimerView: View {
     }
 
     // MARK: - Derivation + actions (mirrors of the #20 helpers)
+
+    /// One explicit, idempotent command shared by the two disjoint restore
+    /// affordances. The display gesture does not cover the controls row, so
+    /// one click can enter this function only once.
+    private func restoreFullTimer() {
+        model.restoreFromMiniTimer()
+    }
 
     /// The task title — "Parent › Child" for a subtask target, the plain
     /// title otherwise (the same resolution as #20's `TimerView`).

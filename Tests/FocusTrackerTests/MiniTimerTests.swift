@@ -657,10 +657,9 @@ final class AppModelMiniTimerTests: XCTestCase {
 
         // End-from-mini clears the flag (the panel closes by any end path,
         // #21 criterion 5) and the sync's pinned order restores the main
-        // window BEFORE dismissing the panel — so by the time the panel
-        // goes away the flag is already off and a regular window is visible
-        // again; the policy must be back on AppKit's default, never stuck
-        // in (or consulted from) a stay-alive state after the session ends.
+        // window on the next run-loop turn after dismissing the panel, with
+        // the flag already off. The policy must be back on AppKit's default,
+        // never stuck in a stay-alive state after the session ends.
         _ = try model.endSession()
         XCTAssertFalse(model.isMiniTimerActive)
         XCTAssertTrue(

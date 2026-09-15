@@ -311,11 +311,14 @@ final class MiniTimerPanelController {
     /// - **Collapse** (`.timerView` + flag on): show the panel (which
     ///   recreates/repairs/re-asserts it — see `show`), then `orderOut` the
     ///   main window.
-    /// - **Restore/end** (otherwise): orderFront the main window FIRST
-    ///   (pinned #30 order — the swap's halves inside one sync so the
-    ///   panel can never be the "last window" mid-check), then dismiss the
-    ///   panel. Runs on every end path because `endSession` clears the
-    ///   flag before the phase swap delivers.
+    /// - **Restore/end** (otherwise): dismiss the panel immediately, then
+    ///   orderFront the main window on the next main-run-loop turn. A
+    ///   nonactivating panel receives the restore click before the app is
+    ///   activated; exposing the full timer synchronously leaves its Mini
+    ///   button under the click's still-finishing mouse transaction. The
+    ///   deferred orderFront consumes that complete panel click before the
+    ///   full window can receive input. Runs on every end path because
+    ///   `endSession` clears the flag before the phase swap delivers.
     static func reconcilePresentation(
         model: AppModel, panel: MiniTimerPanelController
     ) {
@@ -324,9 +327,22 @@ final class MiniTimerPanelController {
             hideMainWindow()
         } else {
             if panel.hasLivePanel {
-                showMainWindow()
                 panel.dismiss()
+                showMainWindowAfterCurrentEvent(model: model, panel: panel)
             }
+        }
+    }
+
+    /// Completes mini -> full only after the event that requested restore
+    /// has returned to AppKit. The state recheck makes queued work safe if a
+    /// fresh collapse arrives before this turn runs; duplicate reconciles do
+    /// not queue duplicate work because the panel was already dismissed.
+    private static func showMainWindowAfterCurrentEvent(
+        model: AppModel, panel: MiniTimerPanelController
+    ) {
+        DispatchQueue.main.async {
+            guard !model.isMiniTimerActive, !panel.hasLivePanel else { return }
+            showMainWindow()
         }
     }
 
