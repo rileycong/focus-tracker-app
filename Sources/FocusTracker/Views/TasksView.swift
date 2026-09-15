@@ -162,13 +162,6 @@ struct TasksView: View {
 
     private var loadedView: some View {
         Group {
-            // The transient completion notice (issue #32): a §6.5 "Yes" can
-            // move a task's whole tree into the Done group, which §8.3
-            // hides with the filter off — the banner names what moved and
-            // where it went, so the disappearance is never inexplicable.
-            if let notice = model.completionNotice {
-                completionNoticeBanner(notice)
-            }
             if model.tasks.isEmpty {
                 ContentUnavailableView(
                     "No tasks yet",
@@ -177,6 +170,26 @@ struct TasksView: View {
                         "Task files in the vault's Tasks/ folder appear here."))
             } else {
                 taskList
+            }
+        }
+        // Issue #32 amendment (toolbar duplication): the completion banner
+        // used to be a conditional *sibling* of the list inside this
+        // toolbar-bearing container, and toggling `completionNotice` between
+        // nil and non-nil switched that `_ConditionalContent` branch inside
+        // the very hierarchy the `.toolbar` modifier is attached to. On macOS
+        // the NSToolbar bridging re-inserts the items on such a structural
+        // change without tearing the previous ones down — hence the duplicated
+        // toolbar (Start Session / New Task / Edit) while the banner showed.
+        // The banner is therefore presented as a `.safeAreaInset(edge: .top)`
+        // on the content: the conditional lives inside the inset's content
+        // closure, a separate subview branch *below* the toolbar level, so
+        // the toolbar-bearing view's structure is identical with or without
+        // the banner — exactly one toolbar instance at all times. Banner
+        // behavior (transient auto-expiry, manual ✕ dismiss) is unchanged;
+        // the 10 s timing here is #39's to change.
+        .safeAreaInset(edge: .top, spacing: 0) {
+            if let notice = model.completionNotice {
+                completionNoticeBanner(notice)
             }
         }
         // The #18 keyboard alternative for the *selected* task: ⌘⇧↑ / ⌘⇧↓
